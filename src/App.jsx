@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Wrench, Users, Plus, Calendar, Search, Car, Mail, MessageCircle, ChevronRight, Save, ArrowLeft, Clock, X, FileText, Edit2, Share2, Printer, DollarSign, Trash2, Smartphone, RefreshCw, AlertCircle } from 'lucide-react';
+import { Wrench, Users, Plus, Calendar, Search, Car, Mail, MessageCircle, ChevronRight, Save, ArrowLeft, Clock, X, FileText, Edit2, Share2, Printer, DollarSign, Trash2, Smartphone, RefreshCw, AlertCircle, CheckSquare, AlertTriangle } from 'lucide-react';
 
-// IMPORTAR EL LOGO (Asegúrate de que el archivo se llame logo.png y esté en la carpeta src)
-import logoImg from './logo.png'; 
+// --- LOGO CONFIGURACIÓN ---
+// Para la versión instalada en tu PC/APK, si tienes el archivo logo.png, 
+// comenta la línea del const y descomenta el import.
+// import logoImg from './logo.png'; 
+const logoImg = "https://placehold.co/400x400/111827/ffffff?text=JAISON+LOGO";
 
 // --- CONFIGURACIÓN DE CONEXIÓN ---
-// Pega aquí la URL de tu Google Apps Script si ya la tienes.
+// Pega aquí la URL de tu Google Apps Script desplegado como Aplicación Web.
 const API_URL = ""; 
 
 // --- ESTILOS PARA IMPRESIÓN ---
@@ -119,6 +122,13 @@ const ReceiptView = ({ service, setView }) => {
         window.open(`sms:${separator}body=${encodeURIComponent(generateShareText())}`, '_blank');
     };
 
+    // Verificar si hay reporte de inspección
+    const hasInspection = service.inspection && (
+        service.inspection.dents || service.inspection.scratches || 
+        service.inspection.glass || service.inspection.lights || 
+        service.inspection.interior || service.inspection.notes
+    );
+
     return (
         <div className="pb-20">
             <PrintStyles />
@@ -149,6 +159,7 @@ const ReceiptView = ({ service, setView }) => {
                     <p className="font-medium text-gray-800">{service.vehicleInfo || 'No especificado'}</p>
                     <p className="text-xs text-gray-500 mt-1">Millaje: {service.mileage || 'N/A'}</p>
                 </div>
+
                 <div className="mb-8">
                     <p className="text-gray-400 text-xs uppercase font-bold mb-2 border-b border-gray-100 pb-1">Descripción</p>
                     {service.items && service.items.length > 0 ? (
@@ -164,6 +175,23 @@ const ReceiptView = ({ service, setView }) => {
                         <div className="flex justify-between items-start mb-2"><span className="font-bold text-gray-800 w-3/4">{service.type}</span><span className="font-bold text-slate-900">${service.cost || '0.00'}</span></div>
                     )}
                 </div>
+
+                {/* Sección de Inspección de Entrada en el Recibo */}
+                {hasInspection && (
+                    <div className="mb-8 p-3 border border-gray-300 rounded bg-gray-50">
+                        <p className="text-xs font-bold text-slate-700 uppercase mb-2">Condición de Recepción del Vehículo</p>
+                        <div className="flex flex-wrap gap-2 mb-2">
+                            {service.inspection.dents && <span className="text-[10px] bg-white border border-gray-300 px-2 py-1 rounded">Abolladuras</span>}
+                            {service.inspection.scratches && <span className="text-[10px] bg-white border border-gray-300 px-2 py-1 rounded">Rayazos</span>}
+                            {service.inspection.glass && <span className="text-[10px] bg-white border border-gray-300 px-2 py-1 rounded">Cristales Rotos</span>}
+                            {service.inspection.lights && <span className="text-[10px] bg-white border border-gray-300 px-2 py-1 rounded">Focos Rotos</span>}
+                            {service.inspection.interior && <span className="text-[10px] bg-white border border-gray-300 px-2 py-1 rounded">Interiores Dañados</span>}
+                        </div>
+                        {service.inspection.notes && <p className="text-xs text-gray-600 italic">Notas: {service.inspection.notes}</p>}
+                        <p className="text-[9px] text-gray-400 mt-2 text-justify">El taller no se hace responsable por los daños pre-existentes listados arriba.</p>
+                    </div>
+                )}
+
                 <div className="border-t-2 border-slate-900 pt-4">
                     {service.subtotal && (
                         <>
@@ -201,15 +229,16 @@ const Dashboard = ({ clients, setView, setSelectedService, isSyncing, syncData }
         </div>
       </div>
       <div className="flex flex-col gap-2 items-end">
-        {/* LOGO EN DASHBOARD */}
-        <div className="w-20 h-20 bg-slate-900 rounded-full flex items-center justify-center border-4 border-gray-200 shadow-lg overflow-hidden shrink-0">
-            <img src={logoImg} alt="Logo" className="w-full h-full object-cover" />
+        <div className="w-16 h-16 bg-slate-900 rounded-full flex items-center justify-center border-4 border-gray-200 shadow-lg overflow-hidden shrink-0">
+            {/* Si subes el archivo logo.png, cambia el src a "/logo.png" */}
+            <img 
+                src={logoImg} 
+                alt="Logo Jaison Auto Repair" 
+                className="w-full h-full object-cover opacity-90"
+            />
         </div>
-        
-        {/* Indicador de conexión */}
-        {!API_URL ? (
-             <div className="text-[9px] text-red-500 font-bold bg-red-100 px-2 py-1 rounded">Modo Demo</div>
-        ) : (
+        {!API_URL && <div className="text-[9px] text-red-500 font-bold bg-red-100 px-2 py-1 rounded">Modo Demo</div>}
+        {API_URL && (
             <button onClick={syncData} className={`text-xs flex items-center gap-1 ${isSyncing ? 'text-blue-500 animate-pulse' : 'text-gray-400'}`}>
                 <RefreshCw size={12} className={isSyncing ? 'animate-spin' : ''} /> {isSyncing ? 'Sincronizando...' : 'Actualizar'}
             </button>
@@ -260,6 +289,13 @@ const Dashboard = ({ clients, setView, setSelectedService, isSyncing, syncData }
 
 const ServiceDetail = ({ service, setView }) => {
   if (!service) return null;
+  // Verificar si hay reporte de inspección
+  const hasInspection = service.inspection && (
+    service.inspection.dents || service.inspection.scratches || 
+    service.inspection.glass || service.inspection.lights || 
+    service.inspection.interior || service.inspection.notes
+  );
+
   return (
     <div className="pb-20">
       <div className="flex items-center justify-between mb-6">
@@ -298,6 +334,25 @@ const ServiceDetail = ({ service, setView }) => {
              )}
              <div className="flex justify-between items-center"><div><p className="text-xs text-green-700 font-bold uppercase mb-1">Costo Total</p><p className="text-2xl font-black text-green-800">${service.cost || '0.00'}</p></div><div className="bg-green-200 p-2 rounded-full text-green-800"><DollarSign size={20} /></div></div>
          </div>
+         
+         {/* Alerta de Inspección */}
+         {hasInspection && (
+             <div className="bg-red-50 p-4 rounded-xl border border-red-100 mb-6">
+                 <div className="flex items-center gap-2 mb-2 text-red-700">
+                     <AlertTriangle size={18} />
+                     <p className="text-sm font-bold uppercase">Daños Pre-existentes Reportados</p>
+                 </div>
+                 <ul className="list-disc list-inside text-sm text-gray-700 mb-2 pl-2">
+                     {service.inspection.dents && <li>Abolladuras/Golpes</li>}
+                     {service.inspection.scratches && <li>Rayazos</li>}
+                     {service.inspection.glass && <li>Cristales Rotos</li>}
+                     {service.inspection.lights && <li>Focos Dañados</li>}
+                     {service.inspection.interior && <li>Interiores Dañados</li>}
+                 </ul>
+                 {service.inspection.notes && <p className="text-sm text-gray-600 bg-white p-2 rounded border border-red-100">"{service.inspection.notes}"</p>}
+             </div>
+         )}
+
          <div className="border-t border-gray-100 pt-4"><p className="text-xs text-gray-400 mb-1">Cliente</p><p className="font-medium text-gray-800 flex items-center gap-2"><Users size={16} className="text-gray-400"/> {service.clientName}</p></div>
       </Card>
       <h3 className="font-bold text-gray-800 mb-3 px-1 flex items-center gap-2"><FileText size={18} /> Notas del Mecánico</h3>
@@ -309,9 +364,6 @@ const ServiceDetail = ({ service, setView }) => {
     </div>
   );
 };
-
-// ... ClientList, ClientDetail, EditClientForm, AddVehicleForm, EditServiceForm se mantienen iguales ...
-// ... Aquí incluyo las versiones compactas de los formularios clave que necesitan manejar el state global
 
 const ClientList = ({ clients, setView, setSelectedClient, searchTerm, setSearchTerm }) => (
   <div className="pb-20">
@@ -374,6 +426,12 @@ const AddServiceForm = ({ clients, setClients, newService, setNewService, setVie
   const [currentService, setCurrentService] = useState('');
   const [currentPrice, setCurrentPrice] = useState('');
   const [applyTax, setApplyTax] = useState(false);
+  
+  // Estado para la inspección
+  const [showInspection, setShowInspection] = useState(false);
+  const [inspectionData, setInspectionData] = useState({
+      dents: false, scratches: false, glass: false, lights: false, interior: false, notes: ''
+  });
 
   const clientVehicles = newService.clientId ? clients.find(c => c.id == newService.clientId)?.vehicles || [] : [];
   const commonServices = ["Cambio de Aceite y Filtro", "Lavado de Chasis", "Frenos", "Alineación", "Diagnóstico", "Inspección", "Aire Acondicionado", "Suspensión", "Batería", "Gomas", "Tune-up", "Otro / Manual"];
@@ -404,7 +462,14 @@ const AddServiceForm = ({ clients, setClients, newService, setNewService, setVie
             id: `h${Date.now()}`,
             date: new Date().toISOString().split('T')[0],
             type: serviceTitle.length > 30 ? serviceTitle.substring(0, 30) + '...' : serviceTitle,
-            notes: newService.notes, mileage: newService.mileage, cost: totalCost, subtotal: subtotal.toFixed(2), taxAmount: taxAmount.toFixed(2), vehicleInfo: vehicleInfo, items: lineItems
+            notes: newService.notes, 
+            mileage: newService.mileage, 
+            cost: totalCost, 
+            subtotal: subtotal.toFixed(2), 
+            taxAmount: taxAmount.toFixed(2), 
+            vehicleInfo: vehicleInfo, 
+            items: lineItems,
+            inspection: inspectionData // Guardar inspección
           }, ...client.history]
         };
       }
@@ -413,7 +478,8 @@ const AddServiceForm = ({ clients, setClients, newService, setNewService, setVie
     setClients(updatedClients);
     await onSaveData(updatedClients);
     setNewService({ clientId: '', vehicleId: '', type: '', notes: '', mileage: '', cost: '' });
-    setLineItems([]); setApplyTax(false); setView('dashboard');
+    setLineItems([]); setApplyTax(false); setShowInspection(false); setInspectionData({ dents: false, scratches: false, glass: false, lights: false, interior: false, notes: '' });
+    setView('dashboard');
     alert("Servicio registrado y guardado");
   };
 
@@ -429,6 +495,28 @@ const AddServiceForm = ({ clients, setClients, newService, setNewService, setVie
           </select>
         </div>
         {clientVehicles.length > 0 && <div className="mb-4"><label className="block text-sm font-medium text-gray-600 mb-1">Vehículo</label><select className="w-full p-3 rounded-xl border border-gray-200 bg-white" value={newService.vehicleId} onChange={(e) => setNewService({...newService, vehicleId: e.target.value})}><option value="">Seleccionar Vehículo...</option>{clientVehicles.map(v => (<option key={v.id} value={v.id}>{v.make} {v.model} - {v.plate}</option>))}</select></div>}
+        
+        {/* SECCIÓN DE INSPECCIÓN DE ENTRADA */}
+        <div className="mb-6 border rounded-xl overflow-hidden border-gray-200">
+            <button onClick={() => setShowInspection(!showInspection)} className="w-full flex justify-between items-center p-3 bg-gray-50 text-left">
+                <span className="font-bold text-slate-700 flex items-center gap-2"><AlertTriangle size={16} className="text-orange-500" /> Inspección de Entrada</span>
+                <ChevronRight size={18} className={`transition-transform text-gray-400 ${showInspection ? 'rotate-90' : ''}`} />
+            </button>
+            {showInspection && (
+                <div className="p-3 bg-white">
+                    <p className="text-xs text-gray-500 mb-3">Marque condiciones pre-existentes:</p>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                        <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={inspectionData.dents} onChange={e => setInspectionData({...inspectionData, dents: e.target.checked})} className="rounded text-red-500 focus:ring-red-500" /> Abolladuras</label>
+                        <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={inspectionData.scratches} onChange={e => setInspectionData({...inspectionData, scratches: e.target.checked})} className="rounded text-red-500 focus:ring-red-500" /> Rayazos</label>
+                        <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={inspectionData.glass} onChange={e => setInspectionData({...inspectionData, glass: e.target.checked})} className="rounded text-red-500 focus:ring-red-500" /> Cristales Rotos</label>
+                        <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={inspectionData.lights} onChange={e => setInspectionData({...inspectionData, lights: e.target.checked})} className="rounded text-red-500 focus:ring-red-500" /> Focos Rotos</label>
+                        <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={inspectionData.interior} onChange={e => setInspectionData({...inspectionData, interior: e.target.checked})} className="rounded text-red-500 focus:ring-red-500" /> Interiores Malos</label>
+                    </div>
+                    <textarea className="w-full p-2 border rounded text-sm h-20" placeholder="Detalles de daños (ej: golpe en puerta trasera)..." value={inspectionData.notes} onChange={e => setInspectionData({...inspectionData, notes: e.target.value})}></textarea>
+                </div>
+            )}
+        </div>
+
         <div className="mb-4"><label className="block text-sm font-bold text-slate-800 mb-1">Agregar Servicios</label><div className="bg-slate-50 p-3 rounded-xl border border-slate-100"><div className="mb-2">{!useManualInput ? (<select className="w-full p-3 rounded-xl border border-gray-200 bg-white mb-2" value={commonServices.includes(currentService) ? currentService : ""} onChange={(e) => { e.target.value === "Otro / Manual" ? setUseManualInput(true) : setCurrentService(e.target.value) }}><option value="">Seleccionar Tipo...</option>{commonServices.map((svc, i) => (<option key={i} value={svc}>{svc}</option>))}</select>) : (<div className="flex gap-2 mb-2"><input type="text" value={currentService} onChange={(e) => setCurrentService(e.target.value)} placeholder="Descripción..." className="flex-1 p-3 rounded-xl border border-gray-200" /><button onClick={() => { setUseManualInput(false); setCurrentService(''); }} className="p-3 bg-white border border-gray-200 rounded-xl"><X size={20} /></button></div>)}</div><div className="flex gap-2"><div className="relative flex-1"><div className="absolute left-3 top-3 text-gray-500 font-medium">$</div><input type="number" value={currentPrice} onChange={(e) => setCurrentPrice(e.target.value)} placeholder="0.00" className="w-full p-3 pl-8 rounded-xl border border-gray-200" /></div><Button onClick={addItem} variant="secondary" className="bg-slate-200 hover:bg-slate-300"><Plus size={20} /></Button></div></div></div>
         {lineItems.length > 0 && (
             <div className="mb-4"><p className="text-xs font-bold text-gray-400 uppercase mb-2">Resumen</p><div className="border rounded-xl overflow-hidden">{lineItems.map((item, idx) => (<div key={idx} className="flex justify-between items-center p-3 border-b bg-white last:border-0"><div><p className="font-medium text-sm text-gray-800">{item.description}</p></div><div className="flex items-center gap-3"><span className="font-bold text-sm text-gray-800">${item.price.toFixed(2)}</span><button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button></div></div>))}<div className="p-3 bg-slate-50 border-t border-gray-200"><div className="flex justify-between items-center mb-2"><span className="text-sm text-gray-600">Subtotal</span><span className="font-bold text-gray-800">${subtotal.toFixed(2)}</span></div><div className="flex justify-between items-center mb-2"><div className="flex items-center gap-2"><input type="checkbox" checked={applyTax} onChange={(e) => setApplyTax(e.target.checked)} className="w-4 h-4" /><label className="text-sm text-gray-700">Aplicar IVU (11.5%)</label></div>{applyTax && <span className="font-medium text-gray-600">${taxAmount.toFixed(2)}</span>}</div><div className="flex justify-between items-center pt-2 border-t border-gray-300 mt-2"><span className="font-bold text-slate-800">TOTAL</span><span className="font-black text-xl text-slate-900">${totalCost}</span></div></div></div></div>
@@ -553,6 +641,23 @@ const AddVehicleForm = ({ selectedClient, clients, setClients, setView, setSelec
     return (<div className="pb-20"><div className="flex items-center gap-2 mb-6"><button onClick={()=>setView('clientDetail')} className="p-2 rounded-full hover:bg-gray-200"><ArrowLeft size={20}/></button><h2 className="text-xl font-bold">Agregar Vehículo</h2></div><Card><Input label="Marca" value={vehicle.make} onChange={e=>setVehicle({...vehicle, make:e.target.value})} /><Input label="Modelo" value={vehicle.model} onChange={e=>setVehicle({...vehicle, model:e.target.value})} /><Input label="Tablilla" value={vehicle.plate} onChange={e=>setVehicle({...vehicle, plate:formatTablilla(e.target.value)})} /><Input label="Color" value={vehicle.color} onChange={e=>setVehicle({...vehicle, color:e.target.value})} /><Button onClick={handleSave} className="w-full mt-2">Guardar</Button></Card></div>);
 };
 
+const BottomNav = ({ view, setView }) => (
+  <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-3 flex justify-between items-center z-20 pb-safe no-print">
+    <button onClick={() => setView('dashboard')} className={`flex flex-col items-center gap-1 ${view === 'dashboard' ? 'text-slate-900' : 'text-gray-400'}`}>
+      <Wrench size={24} />
+      <span className="text-[10px] font-medium">Taller</span>
+    </button>
+    <button onClick={() => setView('clients')} className={`flex flex-col items-center gap-1 ${['clients', 'clientDetail', 'addClient', 'editClient', 'addVehicle'].includes(view) ? 'text-slate-900' : 'text-gray-400'}`}>
+      <Users size={24} />
+      <span className="text-[10px] font-medium">Clientes</span>
+    </button>
+    <button onClick={() => alert("Calendario en desarrollo")} className="flex flex-col items-center gap-1 text-gray-400">
+      <Calendar size={24} />
+      <span className="text-[10px] font-medium">Citas</span>
+    </button>
+  </div>
+);
+
 // --- APP ---
 export default function App() {
   const [view, setView] = useState('dashboard');
@@ -592,5 +697,3 @@ export default function App() {
     </div>
   );
 }
-
-
