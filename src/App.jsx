@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Wrench, Users, Plus, Calendar, Search, Car, Mail, MessageCircle, ChevronRight, Save, ArrowLeft, Clock, X, FileText, Edit2, Share2, Printer, DollarSign, Trash2, Smartphone, RefreshCw, AlertCircle, CheckSquare, AlertTriangle } from 'lucide-react';
 
 // --- LOGO CONFIGURACIÓN ---
-// Para la versión instalada en tu PC/APK, si tienes el archivo logo.png, 
-// comenta la línea del const y descomenta el import.
+// IMPORTANTE: Usa el placeholder para pruebas. 
+// Cuando tengas el archivo 'logo.png' en tu carpeta src, 
+// DESCOMENTA la línea 'import' y COMENTA la línea 'const logoImg'.
+
 // import logoImg from './logo.png'; 
 const logoImg = "https://placehold.co/400x400/111827/ffffff?text=JAISON+LOGO";
 
@@ -365,6 +367,9 @@ const ServiceDetail = ({ service, setView }) => {
   );
 };
 
+// ... ClientList, ClientDetail, EditClientForm, AddVehicleForm, EditServiceForm se mantienen iguales ...
+// ... Aquí incluyo las versiones compactas de los formularios clave que necesitan manejar el state global
+
 const ClientList = ({ clients, setView, setSelectedClient, searchTerm, setSearchTerm }) => (
   <div className="pb-20">
     <div className="sticky top-0 bg-gray-50 pt-2 pb-4 z-10">
@@ -483,6 +488,17 @@ const AddServiceForm = ({ clients, setClients, newService, setNewService, setVie
     alert("Servicio registrado y guardado");
   };
 
+  const handleServiceTypeChange = (e) => {
+    const value = e.target.value;
+    if (value === "Otro / Manual") {
+      setUseManualInput(true);
+      setCurrentService('');
+    } else {
+      setUseManualInput(false);
+      setCurrentService(value);
+    }
+  };
+
   return (
     <div className="pb-20">
       <div className="flex items-center gap-2 mb-6"><button onClick={() => setView('dashboard')} className="p-2 rounded-full hover:bg-gray-200"><ArrowLeft size={20} /></button><h2 className="text-xl font-bold">Registrar Servicio</h2></div>
@@ -517,7 +533,7 @@ const AddServiceForm = ({ clients, setClients, newService, setNewService, setVie
             )}
         </div>
 
-        <div className="mb-4"><label className="block text-sm font-bold text-slate-800 mb-1">Agregar Servicios</label><div className="bg-slate-50 p-3 rounded-xl border border-slate-100"><div className="mb-2">{!useManualInput ? (<select className="w-full p-3 rounded-xl border border-gray-200 bg-white mb-2" value={commonServices.includes(currentService) ? currentService : ""} onChange={(e) => { e.target.value === "Otro / Manual" ? setUseManualInput(true) : setCurrentService(e.target.value) }}><option value="">Seleccionar Tipo...</option>{commonServices.map((svc, i) => (<option key={i} value={svc}>{svc}</option>))}</select>) : (<div className="flex gap-2 mb-2"><input type="text" value={currentService} onChange={(e) => setCurrentService(e.target.value)} placeholder="Descripción..." className="flex-1 p-3 rounded-xl border border-gray-200" /><button onClick={() => { setUseManualInput(false); setCurrentService(''); }} className="p-3 bg-white border border-gray-200 rounded-xl"><X size={20} /></button></div>)}</div><div className="flex gap-2"><div className="relative flex-1"><div className="absolute left-3 top-3 text-gray-500 font-medium">$</div><input type="number" value={currentPrice} onChange={(e) => setCurrentPrice(e.target.value)} placeholder="0.00" className="w-full p-3 pl-8 rounded-xl border border-gray-200" /></div><Button onClick={addItem} variant="secondary" className="bg-slate-200 hover:bg-slate-300"><Plus size={20} /></Button></div></div></div>
+        <div className="mb-4"><label className="block text-sm font-bold text-slate-800 mb-1">Agregar Servicios</label><div className="bg-slate-50 p-3 rounded-xl border border-slate-100"><div className="mb-2">{!useManualInput ? (<select className="w-full p-3 rounded-xl border border-gray-200 bg-white mb-2" value={commonServices.includes(currentService) ? currentService : ""} onChange={handleServiceTypeChange}><option value="">Seleccionar Tipo...</option>{commonServices.map((svc, i) => (<option key={i} value={svc}>{svc}</option>))}</select>) : (<div className="flex gap-2 mb-2"><input type="text" value={currentService} onChange={(e) => setCurrentService(e.target.value)} placeholder="Descripción..." className="flex-1 p-3 rounded-xl border border-gray-200" /><button onClick={() => { setUseManualInput(false); setCurrentService(''); }} className="p-3 bg-white border border-gray-200 rounded-xl"><X size={20} /></button></div>)}</div><div className="flex gap-2"><div className="relative flex-1"><div className="absolute left-3 top-3 text-gray-500 font-medium">$</div><input type="number" value={currentPrice} onChange={(e) => setCurrentPrice(e.target.value)} placeholder="0.00" className="w-full p-3 pl-8 rounded-xl border border-gray-200" /></div><Button onClick={addItem} variant="secondary" className="bg-slate-200 hover:bg-slate-300"><Plus size={20} /></Button></div></div></div>
         {lineItems.length > 0 && (
             <div className="mb-4"><p className="text-xs font-bold text-gray-400 uppercase mb-2">Resumen</p><div className="border rounded-xl overflow-hidden">{lineItems.map((item, idx) => (<div key={idx} className="flex justify-between items-center p-3 border-b bg-white last:border-0"><div><p className="font-medium text-sm text-gray-800">{item.description}</p></div><div className="flex items-center gap-3"><span className="font-bold text-sm text-gray-800">${item.price.toFixed(2)}</span><button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button></div></div>))}<div className="p-3 bg-slate-50 border-t border-gray-200"><div className="flex justify-between items-center mb-2"><span className="text-sm text-gray-600">Subtotal</span><span className="font-bold text-gray-800">${subtotal.toFixed(2)}</span></div><div className="flex justify-between items-center mb-2"><div className="flex items-center gap-2"><input type="checkbox" checked={applyTax} onChange={(e) => setApplyTax(e.target.checked)} className="w-4 h-4" /><label className="text-sm text-gray-700">Aplicar IVU (11.5%)</label></div>{applyTax && <span className="font-medium text-gray-600">${taxAmount.toFixed(2)}</span>}</div><div className="flex justify-between items-center pt-2 border-t border-gray-300 mt-2"><span className="font-bold text-slate-800">TOTAL</span><span className="font-black text-xl text-slate-900">${totalCost}</span></div></div></div></div>
         )}
@@ -574,7 +590,7 @@ const EditServiceForm = ({ service, clients, setClients, setView, setSelectedSer
     const [currentService, setCurrentService] = useState('');
     const [currentPrice, setCurrentPrice] = useState('');
     const [useManualInput, setUseManualInput] = useState(false);
-    const commonServices = ["Cambio de Aceite", "Frenos", "Otros", "Manual"]; 
+    const commonServices = ["Cambio de Aceite y Filtro", "Lavado de Chasis", "Frenos", "Alineación", "Diagnóstico", "Inspección", "Aire Acondicionado", "Suspensión", "Batería", "Gomas", "Tune-up", "Otro / Manual"];
 
     useEffect(() => {
         if (service) {
@@ -602,11 +618,22 @@ const EditServiceForm = ({ service, clients, setClients, setView, setSelectedSer
         setView('serviceDetail');
     };
 
+    const handleServiceTypeChange = (e) => {
+        const value = e.target.value;
+        if (value === "Otro / Manual") {
+            setUseManualInput(true);
+            setCurrentService('');
+        } else {
+            setUseManualInput(false);
+            setCurrentService(value);
+        }
+    };
+
     return (
         <div className="pb-20">
             <div className="flex items-center gap-2 mb-6"><button onClick={() => setView('serviceDetail')} className="p-2 rounded-full hover:bg-gray-200"><ArrowLeft size={20} /></button><h2 className="text-xl font-bold">Editar Orden</h2></div>
             <Card>
-                <div className="mb-4 bg-slate-50 p-3 rounded-xl"><div className="flex gap-2 mb-2"><input className="flex-1 p-2 border rounded" placeholder="Servicio..." value={currentService} onChange={e=>setCurrentService(e.target.value)} /><input className="w-20 p-2 border rounded" type="number" placeholder="$" value={currentPrice} onChange={e=>setCurrentPrice(e.target.value)} /><button onClick={addItem} className="bg-slate-200 p-2 rounded"><Plus size={16}/></button></div></div>
+                <div className="mb-4 bg-slate-50 p-3 rounded-xl"><div className="flex gap-2 mb-2"><div className="flex-1"><label className="block text-xs font-bold text-gray-500 mb-1">Servicio</label>{!useManualInput ? (<select className="w-full p-2 border rounded bg-white" value={commonServices.includes(currentService) ? currentService : ""} onChange={handleServiceTypeChange}><option value="">Seleccionar...</option>{commonServices.map((svc, i) => (<option key={i} value={svc}>{svc}</option>))}</select>) : (<div className="flex gap-2"><input className="flex-1 p-2 border rounded" placeholder="Descripción..." value={currentService} onChange={e=>setCurrentService(e.target.value)} /><button onClick={() => { setUseManualInput(false); setCurrentService(''); }} className="p-2 bg-white border rounded"><X size={16} /></button></div>)}</div></div><div className="flex gap-2"><div className="relative flex-1"><div className="absolute left-3 top-3 text-gray-500 font-medium">$</div><input className="w-full p-3 pl-8 border rounded-xl" type="number" placeholder="0.00" value={currentPrice} onChange={e=>setCurrentPrice(e.target.value)} /></div><button onClick={addItem} className="bg-slate-200 p-2 rounded"><Plus size={16}/></button></div></div>
                 <div className="mb-4 border rounded p-2">{lineItems.map((i,x)=><div key={x} className="flex justify-between border-b p-2"><span>{i.description}</span><div className="flex gap-2"><span>${i.price}</span><button onClick={()=>removeItem(x)}><Trash2 size={14} className="text-red-500"/></button></div></div>)}</div>
                 <div className="flex items-center gap-2 mb-4"><input type="checkbox" checked={applyTax} onChange={e=>setApplyTax(e.target.checked)} /> <label>IVU</label> <span className="font-bold ml-auto">Total: ${totalCost}</span></div>
                 <Input label="Millaje" value={mileage} onChange={e=>setMileage(e.target.value)} type="number" />
