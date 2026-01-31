@@ -2,9 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Wrench, Users, Plus, Calendar, Search, Car, Mail, MessageCircle, ChevronRight, Save, ArrowLeft, Clock, X, FileText, Edit2, Share2, Printer, DollarSign, Trash2, Smartphone, RefreshCw, AlertCircle, CheckSquare, AlertTriangle } from 'lucide-react';
 
 // --- LOGO CONFIGURACIÓN ---
-// IMPORTANTE: Usa el placeholder para pruebas. 
-// Cuando tengas el archivo 'logo.png' en tu carpeta src, 
-// DESCOMENTA la línea 'import' y COMENTA la línea 'const logoImg'.
+// IMPORTANTE: Para la vista previa aquí usamos este link.
+// En tu GitHub, DESCOMENTA la línea 'import' y COMENTA la línea 'const logoImg'.
 
 // import logoImg from './logo.png'; 
 const logoImg = "https://placehold.co/400x400/111827/ffffff?text=JAISON+LOGO";
@@ -545,43 +544,6 @@ const AddServiceForm = ({ clients, setClients, newService, setNewService, setVie
   );
 };
 
-const AddClientForm = ({ clients, setClients, newClient, setNewClient, setView, customSuccess, onSaveData }) => {
-  const handleAddClient = async () => {
-    const id = Date.now();
-    const newClientData = {
-      id, name: newClient.name, phone: newClient.phone, email: newClient.email,
-      vehicles: [{ id: `v${Date.now()}`, make: newClient.carMake, model: newClient.carModel, year: newClient.carYear, plate: newClient.carPlate, color: newClient.carColor }],
-      history: []
-    };
-    const updated = [...clients, newClientData];
-    setClients(updated);
-    await onSaveData(updated);
-    setNewClient({ name: '', phone: '', email: '', carMake: '', carModel: '', carYear: '', carPlate: '', carColor: '' });
-    if (customSuccess) customSuccess(id); else setView('clients');
-  };
-  const handlePhoneChange = (e) => {
-    let value = e.target.value.replace(/\D/g, ''); if (value.length > 10) value = value.slice(0, 10);
-    let fv = ''; if (value.length > 0) fv = `(${value.slice(0, 3)}`; if (value.length > 3) fv += `)${value.slice(3, 6)}`; if (value.length > 6) fv += `-${value.slice(6)}`;
-    setNewClient({...newClient, phone: fv});
-  };
-  return (
-    <div className="pb-20">
-      <div className="flex items-center gap-2 mb-6"><button onClick={() => customSuccess ? setView('addService') : setView('clients')} className="p-2 rounded-full hover:bg-gray-200"><ArrowLeft size={20} /></button><h2 className="text-xl font-bold">Nuevo Cliente</h2></div>
-      <Card>
-        <Input label="Nombre Completo" value={newClient.name} onChange={e => setNewClient({...newClient, name: e.target.value})} />
-        <Input label="Teléfono" value={newClient.phone} onChange={handlePhoneChange} placeholder="(787)..." type="tel" />
-        <Input label="Email" value={newClient.email} onChange={e => setNewClient({...newClient, email: e.target.value})} />
-        <div className="border-t border-gray-100 my-4"></div>
-        <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wide mb-4">Vehículo Principal</h3>
-        <div className="grid grid-cols-2 gap-3"><Input label="Marca" value={newClient.carMake} onChange={e => setNewClient({...newClient, carMake: e.target.value})} /><Input label="Modelo" value={newClient.carModel} onChange={e => setNewClient({...newClient, carModel: e.target.value})} /></div>
-        <div className="grid grid-cols-2 gap-3"><Input label="Año" value={newClient.carYear} onChange={e => setNewClient({...newClient, carYear: e.target.value})} /><Input label="Tablilla" value={newClient.carPlate} onChange={e => setNewClient({...newClient, carPlate: formatTablilla(e.target.value)})} /></div>
-        <Input label="Color" value={newClient.carColor} onChange={e => setNewClient({...newClient, carColor: e.target.value})} placeholder="Ej: Blanco" />
-        <Button onClick={handleAddClient} className="w-full mt-4"><Save size={18} /> Guardar Cliente</Button>
-      </Card>
-    </div>
-  );
-};
-
 const EditServiceForm = ({ service, clients, setClients, setView, setSelectedService, onSaveData }) => {
     const [mileage, setMileage] = useState('');
     const [notes, setNotes] = useState('');
@@ -590,7 +552,7 @@ const EditServiceForm = ({ service, clients, setClients, setView, setSelectedSer
     const [currentService, setCurrentService] = useState('');
     const [currentPrice, setCurrentPrice] = useState('');
     const [useManualInput, setUseManualInput] = useState(false);
-    const commonServices = ["Cambio de Aceite y Filtro", "Lavado de Chasis", "Frenos", "Alineación", "Diagnóstico", "Inspección", "Aire Acondicionado", "Suspensión", "Batería", "Gomas", "Tune-up", "Otro / Manual"];
+    const commonServices = ["Cambio de Aceite", "Frenos", "Otros", "Manual"]; 
 
     useEffect(() => {
         if (service) {
@@ -618,22 +580,11 @@ const EditServiceForm = ({ service, clients, setClients, setView, setSelectedSer
         setView('serviceDetail');
     };
 
-    const handleServiceTypeChange = (e) => {
-        const value = e.target.value;
-        if (value === "Otro / Manual") {
-            setUseManualInput(true);
-            setCurrentService('');
-        } else {
-            setUseManualInput(false);
-            setCurrentService(value);
-        }
-    };
-
     return (
         <div className="pb-20">
             <div className="flex items-center gap-2 mb-6"><button onClick={() => setView('serviceDetail')} className="p-2 rounded-full hover:bg-gray-200"><ArrowLeft size={20} /></button><h2 className="text-xl font-bold">Editar Orden</h2></div>
             <Card>
-                <div className="mb-4 bg-slate-50 p-3 rounded-xl"><div className="flex gap-2 mb-2"><div className="flex-1"><label className="block text-xs font-bold text-gray-500 mb-1">Servicio</label>{!useManualInput ? (<select className="w-full p-2 border rounded bg-white" value={commonServices.includes(currentService) ? currentService : ""} onChange={handleServiceTypeChange}><option value="">Seleccionar...</option>{commonServices.map((svc, i) => (<option key={i} value={svc}>{svc}</option>))}</select>) : (<div className="flex gap-2"><input className="flex-1 p-2 border rounded" placeholder="Descripción..." value={currentService} onChange={e=>setCurrentService(e.target.value)} /><button onClick={() => { setUseManualInput(false); setCurrentService(''); }} className="p-2 bg-white border rounded"><X size={16} /></button></div>)}</div></div><div className="flex gap-2"><div className="relative flex-1"><div className="absolute left-3 top-3 text-gray-500 font-medium">$</div><input className="w-full p-3 pl-8 border rounded-xl" type="number" placeholder="0.00" value={currentPrice} onChange={e=>setCurrentPrice(e.target.value)} /></div><button onClick={addItem} className="bg-slate-200 p-2 rounded"><Plus size={16}/></button></div></div>
+                <div className="mb-4 bg-slate-50 p-3 rounded-xl"><div className="flex gap-2 mb-2"><input className="flex-1 p-2 border rounded" placeholder="Servicio..." value={currentService} onChange={e=>setCurrentService(e.target.value)} /><input className="w-20 p-2 border rounded" type="number" placeholder="$" value={currentPrice} onChange={e=>setCurrentPrice(e.target.value)} /><button onClick={addItem} className="bg-slate-200 p-2 rounded"><Plus size={16}/></button></div></div>
                 <div className="mb-4 border rounded p-2">{lineItems.map((i,x)=><div key={x} className="flex justify-between border-b p-2"><span>{i.description}</span><div className="flex gap-2"><span>${i.price}</span><button onClick={()=>removeItem(x)}><Trash2 size={14} className="text-red-500"/></button></div></div>)}</div>
                 <div className="flex items-center gap-2 mb-4"><input type="checkbox" checked={applyTax} onChange={e=>setApplyTax(e.target.checked)} /> <label>IVU</label> <span className="font-bold ml-auto">Total: ${totalCost}</span></div>
                 <Input label="Millaje" value={mileage} onChange={e=>setMileage(e.target.value)} type="number" />
