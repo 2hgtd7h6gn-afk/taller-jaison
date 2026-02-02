@@ -133,7 +133,23 @@ const WhatsAppIcon = () => (
 
 // --- COMPONENTE PRINCIPAL ---
 function App() {
-  const [sharedReceiptData, setSharedReceiptData] = useState<{order: ServiceOrder, client: Client} | null>(null);
+  // LÓGICA DE VELOCIDAD: Revisar URL ANTES de crear el estado inicial
+  const [sharedReceiptData] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const r = params.get('r');
+      if (r) {
+        try {
+          return JSON.parse(atob(r));
+        } catch (e) {
+          console.error("Error decodificando recibo", e);
+          return null;
+        }
+      }
+    }
+    return null;
+  });
+
   const [view, setView] = useState<'dashboard' | 'register' | 'history' | 'details' | 'settings' | 'receipt'>('dashboard');
   const [clients, setClients] = useState<Client[]>([]);
   const [orders, setOrders] = useState<ServiceOrder[]>([]);
@@ -142,44 +158,38 @@ function App() {
   const [filterMode, setFilterMode] = useState<'all' | 'active' | 'ready'>('all');
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const receiptData = params.get('r');
-    if (receiptData) {
-        try {
-            const decoded = JSON.parse(atob(receiptData));
-            setSharedReceiptData(decoded);
-        } catch (e) {
-            console.error("Error al leer recibo", e);
-        }
+    // Solo cargar datos locales si NO estamos en modo recibo compartido
+    if (!sharedReceiptData) {
+        const savedClients = localStorage.getItem('jaison_clients');
+        if (savedClients) setClients(JSON.parse(savedClients));
+        const savedOrders = localStorage.getItem('jaison_orders');
+        if (savedOrders) setOrders(JSON.parse(savedOrders));
     }
-
-    const savedClients = localStorage.getItem('jaison_clients');
-    if (savedClients) setClients(JSON.parse(savedClients));
-    const savedOrders = localStorage.getItem('jaison_orders');
-    if (savedOrders) setOrders(JSON.parse(savedOrders));
-  }, []);
+  }, [sharedReceiptData]);
 
   useEffect(() => {
-    if (clients.length > 0) localStorage.setItem('jaison_clients', JSON.stringify(clients));
-  }, [clients]);
+    if (!sharedReceiptData && clients.length > 0) localStorage.setItem('jaison_clients', JSON.stringify(clients));
+  }, [clients, sharedReceiptData]);
 
   useEffect(() => {
-    if (orders.length > 0) localStorage.setItem('jaison_orders', JSON.stringify(orders));
-  }, [orders]);
+    if (!sharedReceiptData && orders.length > 0) localStorage.setItem('jaison_orders', JSON.stringify(orders));
+  }, [orders, sharedReceiptData]);
 
+  // --- MODO INVITADO (PRIORIDAD ALTA) ---
   if (sharedReceiptData) {
       return (
-        <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-            <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden">
+        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden border border-slate-200">
                 <ReceiptView order={sharedReceiptData.order} client={sharedReceiptData.client} onClose={() => {}} isSharedMode={true} />
-                <div className="bg-slate-100 p-4 text-center text-xs text-slate-500 border-t">
-                    <p>Este es un recibo digital verificado de <strong>Jaison Auto Repair</strong>.</p>
+                <div className="bg-slate-50 p-4 text-center text-[10px] text-slate-400 border-t border-slate-100">
+                    <p>Documento digital generado por <strong>Jaison Auto Repair App</strong></p>
                 </div>
             </div>
         </div>
       );
   }
 
+  // --- MODO ADMIN (JAISON) ---
   const handleSaveOrder = async (newOrder: ServiceOrder, directClient?: Client, directVehicle?: Vehicle) => {
     setOrders(prev => {
         const exists = prev.some(o => o.id === newOrder.id);
