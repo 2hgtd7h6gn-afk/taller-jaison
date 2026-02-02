@@ -7,6 +7,20 @@ import {
   X, CreditCard, History, CalendarDays, Archive, Mail, Link as LinkIcon
 } from 'lucide-react';
 
+// --- FUNCIONES AUXILIARES PARA TILDES Y EMOJIS (UTF-8) ---
+const safeBtoa = (str: string) => {
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+      function toSolidBytes(match, p1) {
+          return String.fromCharCode(parseInt(p1, 16));
+  }));
+};
+
+const safeAtob = (str: string) => {
+  return decodeURIComponent(atob(str).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+  }).join(''));
+};
+
 // --- CONFIGURACIÓN ---
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzr5yPpZmAOOGgGR3-dmhqrdnsAi_bTJUMcPt5s5MuS6rQtP2EJFT5q6bXvty9eZrWt/exec";
 const API_TOKEN = "TALLER_JAISON_SECURE_2026";
@@ -133,22 +147,8 @@ const WhatsAppIcon = () => (
 
 // --- COMPONENTE PRINCIPAL ---
 function App() {
-  // LÓGICA DE VELOCIDAD: Revisar URL ANTES de crear el estado inicial
-  const [sharedReceiptData] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const r = params.get('r');
-      if (r) {
-        try {
-          return JSON.parse(atob(r));
-        } catch (e) {
-          console.error("Error decodificando recibo", e);
-          return null;
-        }
-      }
-    }
-    return null;
-  });
+  const [sharedReceiptData, setSharedReceiptData] = useState<{order: ServiceOrder, client: Client} | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
 
   const [view, setView] = useState<'dashboard' | 'register' | 'history' | 'details' | 'settings' | 'receipt'>('dashboard');
   const [clients, setClients] = useState<Client[]>([]);
@@ -158,14 +158,28 @@ function App() {
   const [filterMode, setFilterMode] = useState<'all' | 'active' | 'ready'>('all');
 
   useEffect(() => {
-    // Solo cargar datos locales si NO estamos en modo recibo compartido
-    if (!sharedReceiptData) {
+    // 1. Detección de Recibo Compartido (Con soporte de Tildes)
+    const params = new URLSearchParams(window.location.search);
+    const receiptData = params.get('r');
+    
+    if (receiptData) {
+        try {
+            // Usamos safeAtob para decodificar tildes correctamente
+            const jsonString = safeAtob(receiptData);
+            const decoded = JSON.parse(jsonString);
+            setSharedReceiptData(decoded);
+        } catch (e) {
+            console.error("Error decodificando recibo", e);
+            setReceiptError("El enlace del recibo parece estar incompleto o dañado.");
+        }
+    } else {
+        // 2. Carga normal de datos (Solo si no hay recibo en URL)
         const savedClients = localStorage.getItem('jaison_clients');
         if (savedClients) setClients(JSON.parse(savedClients));
         const savedOrders = localStorage.getItem('jaison_orders');
         if (savedOrders) setOrders(JSON.parse(savedOrders));
     }
-  }, [sharedReceiptData]);
+  }, []);
 
   useEffect(() => {
     if (!sharedReceiptData && clients.length > 0) localStorage.setItem('jaison_clients', JSON.stringify(clients));
@@ -175,7 +189,7 @@ function App() {
     if (!sharedReceiptData && orders.length > 0) localStorage.setItem('jaison_orders', JSON.stringify(orders));
   }, [orders, sharedReceiptData]);
 
-  // --- MODO INVITADO (PRIORIDAD ALTA) ---
+  // --- MODO INVITADO (Recibo Compartido) ---
   if (sharedReceiptData) {
       return (
         <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
@@ -186,6 +200,20 @@ function App() {
                 </div>
             </div>
         </div>
+      );
+  }
+
+  // --- MODO ERROR (Si el link falla) ---
+  if (receiptError) {
+      return (
+          <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-center">
+              <div className="bg-slate-800 p-8 rounded-3xl border border-red-500/50 max-w-sm">
+                  <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                  <h3 className="text-xl font-bold text-white mb-2">Enlace Inválido</h3>
+                  <p className="text-slate-400 text-sm mb-6">{receiptError}</p>
+                  <a href="/" className="bg-indigo-600 text-white py-3 px-6 rounded-xl font-bold text-sm">Ir al Inicio</a>
+              </div>
+          </div>
       );
   }
 
@@ -949,7 +977,8 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
     // GENERAR LINK "ESTILO CLOVER"
     const generateSharedLink = () => {
         const data = JSON.stringify({ order, client });
-        const encoded = btoa(data); // Codificar en Base64
+        // Usamos la nueva función segura para tildes
+        const encoded = safeBtoa(data); 
         return `https://taller-jaison.vercel.app/?r=${encoded}`;
     };
 
