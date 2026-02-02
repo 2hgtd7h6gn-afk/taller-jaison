@@ -7,16 +7,16 @@ import {
   X, CreditCard, History, CalendarDays, Archive, Mail, Link as LinkIcon
 } from 'lucide-react';
 
-// --- FUNCIONES AUXILIARES PARA TILDES Y EMOJIS (UTF-8) ---
+// --- FUNCIONES AUXILIARES PARA TILDES Y EMOJIS (CORREGIDAS) ---
 const safeBtoa = (str: string) => {
   return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
-      function toSolidBytes(match, p1) {
+      function toSolidBytes(match: string, p1: string) { // <--- AQUI ESTABA EL ERROR (Faltaban los tipos)
           return String.fromCharCode(parseInt(p1, 16));
   }));
 };
 
 const safeAtob = (str: string) => {
-  return decodeURIComponent(atob(str).split('').map(function(c) {
+  return decodeURIComponent(atob(str).split('').map(function(c: string) { // <--- AQUI TAMBIEN
       return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
   }).join(''));
 };
