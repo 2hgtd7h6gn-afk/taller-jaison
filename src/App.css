@@ -1,0 +1,307 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Plus, Search, Car, Wrench, ClipboardList, CheckCircle2, 
+  Clock, AlertCircle, ChevronRight, LayoutDashboard, 
+  Settings, Trash2, ArrowLeft, Printer, MessageCircle, Mail, AlertTriangle,
+  FileText, CheckSquare, Layers, UserPlus, FilterX, MessageSquare
+} from 'lucide-react';
+
+// --- CONFIGURACIÓN ---
+// ↓↓↓ ¡¡PEGA AQUÍ TU URL DE GOOGLE APPS SCRIPT ENTRE LAS COMILLAS!! ↓↓↓
+const GOOGLE_SCRIPT_URL = https://script.google.com/macros/s/AKfycbzr5yPpZmAOOGgGR3-dmhqrdnsAi_bTJUMcPt5s5MuS6rQtP2EJFT5q6bXvty9eZrWt/exec;
+const API_TOKEN = "TALLER_JAISON_SECURE_2026";
+
+// --- Tipos ---
+type ServiceStatus = 'recibido' | 'diagnostico' | 'espera_repuestos' | 'reparacion' | 'listo' | 'entregado';
+
+interface Vehicle { id: string; plate: string; brand: string; model: string; year: string; color: string; }
+interface LineItem { description: string; price: number; }
+interface InspectionPart { id: string; label: string; damaged: boolean; }
+interface ServiceOrder {
+  id: string; vehicleId: string; clientId: string; description: string; servicePerformedNotes?: string;
+  status: ServiceStatus; entryDate: string; miles: string; items: LineItem[];
+  subtotal: number; tax: number; total: number; applyIVU: boolean;
+  inspection: { parts: InspectionPart[], notes: string };
+}
+interface Client { id: string; name: string; phone: string; email: string; garage: Vehicle[]; }
+
+const DEFAULT_INSPECTION_PARTS = [
+  { id: 'g_izq', label: 'Guardalodo Izq', damaged: false }, { id: 'g_der', label: 'Guardalodo Der', damaged: false },
+  { id: 'p_tras_izq', label: 'Panel Tras Izq', damaged: false }, { id: 'p_tras_der', label: 'Panel Tras Der', damaged: false },
+  { id: 'puerta_del_izq', label: 'Puerta Del Izq', damaged: false }, { id: 'puerta_del_der', label: 'Puerta Del Der', damaged: false },
+  { id: 'puerta_tras_izq', label: 'Puerta Tras Izq', damaged: false }, { id: 'puerta_tras_der', label: 'Puerta Tras Der', damaged: false },
+  { id: 'foco_del_izq', label: 'Foco Del Izq', damaged: false }, { id: 'foco_del_der', label: 'Foco Del Der', damaged: false },
+  { id: 'glass_del', label: 'Cristal Del', damaged: false }, { id: 'glass_tras', label: 'Cristal Trasero', damaged: false },
+];
+
+const COMMON_SERVICES = ["Cambio de Aceite y Filtro", "Lavado de Chasis", "Frenos", "Alineación", "Diagnóstico", "Aire Acondicionado", "Batería", "Gomas", "Tune-up"];
+
+const statusConfig: Record<ServiceStatus, { label: string, color: string, icon: any }> = {
+  recibido: { label: 'Recibido', color: 'bg-blue-100 text-blue-700 border-blue-200', icon: ClipboardList },
+  diagnostico: { label: 'En Diagnóstico', color: 'bg-purple-100 text-purple-700 border-purple-200', icon: Search },
+  espera_repuestos: { label: 'Repuestos', color: 'bg-orange-100 text-orange-700 border-orange-200', icon: Clock },
+  reparacion: { label: 'En Reparación', color: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: Wrench },
+  listo: { label: 'Listo', color: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircle2 },
+  entregado: { label: 'Entregado', color: 'bg-gray-100 text-gray-700 border-gray-200', icon: Car },
+};
+
+const formatPlate = (val: string) => {
+  let v = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (v.length > 6) v = v.slice(0, 6);
+  if (v.length > 3) v = v.slice(0, 3) + '-' + v.slice(3);
+  return v;
+};
+
+const formatPhone = (val: string) => {
+  let v = val.replace(/\D/g, '');
+  if (v.length > 10) v = v.slice(0, 10);
+  if (v.length > 6) return `(${v.slice(0, 3)}) ${v.slice(3, 6)}-${v.slice(6)}`;
+  return v;
+};
+
+// --- APP ---
+function App() {
+  const [view, setView] = useState<'dashboard' | 'register' | 'details' | 'settings' | 'receipt'>('dashboard');
+  const [clients, setClients] = useState<Client[]>([]);
+  const [orders, setOrders] = useState<ServiceOrder[]>([]);
+  const [selectedOrder, setSelectedOrder] = useState<ServiceOrder | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterMode, setFilterMode] = useState<'all' | 'active' | 'ready'>('all');
+
+  useEffect(() => {
+    const savedClients = localStorage.getItem('jaison_clients');
+    if (savedClients) setClients(JSON.parse(savedClients));
+    const savedOrders = localStorage.getItem('jaison_orders');
+    if (savedOrders) setOrders(JSON.parse(savedOrders));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('jaison_clients', JSON.stringify(clients));
+    localStorage.setItem('jaison_orders', JSON.stringify(orders));
+  }, [clients, orders]);
+
+  const handleSaveOrder = async (newOrder: ServiceOrder) => {
+      setOrders(prev => [newOrder, ...prev]); 
+      const client = clients.find(c => c.id === newOrder.clientId);
+      const vehicle = client?.garage.find(v => v.id === newOrder.vehicleId);
+
+      const payload = {
+        token: API_TOKEN,
+        orden_id: newOrder.id,
+        estado: newOrder.status,
+        cliente_nombre: client?.name,
+        cliente_telefono: client?.phone,
+        vehiculo_info: `${vehicle?.brand} ${vehicle?.model} (${vehicle?.year})`,
+        vehiculo_placa: vehicle?.plate,
+        falla_reportada: newOrder.description,
+        trabajo_realizado: newOrder.servicePerformedNotes || "Pendiente",
+        total: newOrder.total,
+      };
+
+      if (GOOGLE_SCRIPT_URL.includes("PEGAR_AQUI")) {
+        alert("⚠️ FALTA CONFIGURAR LA URL: Pega la dirección de Google Script en el archivo src/App.tsx línea 12.");
+        return;
+      }
+
+      try {
+          await fetch(GOOGLE_SCRIPT_URL, {
+              method: 'POST',
+              mode: 'no-cors', 
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+          });
+          console.log("Enviado a Google Sheets");
+      } catch (error) {
+          alert('Guardado localmente. Error conectando a Google (revisa tu internet).');
+      }
+  };
+
+  const handleUpdateOrder = (updatedOrder: ServiceOrder) => {
+    const updatedOrders = orders.map(o => o.id === updatedOrder.id ? updatedOrder : o);
+    setOrders(updatedOrders);
+    setSelectedOrder(updatedOrder);
+  };
+
+  const stats = useMemo(() => ({
+    active: orders.filter(o => !['entregado', 'listo'].includes(o.status)).length,
+    ready: orders.filter(o => o.status === 'listo').length,
+    total: orders.length
+  }), [orders]);
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      const client = clients.find(c => c.id === o.clientId);
+      const vehicle = client?.garage.find(v => v.id === o.vehicleId);
+      const matchesSearch = ((client?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (vehicle?.plate || '').toLowerCase().includes(searchTerm.toLowerCase()));
+      if (filterMode === 'active') return matchesSearch && !['entregado', 'listo'].includes(o.status);
+      if (filterMode === 'ready') return matchesSearch && o.status === 'listo';
+      return matchesSearch;
+    });
+  }, [orders, clients, searchTerm, filterMode]);
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans pb-24 selection:bg-indigo-500">
+      <style>{`@media print { body * { visibility: hidden; } .printable-area, .printable-area * { visibility: visible; } .printable-area { position: absolute; left: 0; top: 0; width: 100%; color: black !important; background: white !important; } .no-print { display: none !important; } }`}</style>
+
+      <header className="bg-slate-900 border-b border-slate-800 p-5 sticky top-0 z-50 flex justify-between items-center no-print">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full border-2 border-slate-700 bg-slate-800 flex items-center justify-center"><Wrench className="w-6 h-6 text-indigo-400" /></div>
+          <div><h1 className="text-xl font-black tracking-tighter leading-none text-white">JAISON AUTO REPAIR</h1><span className="text-[10px] text-red-500 font-bold uppercase tracking-widest">Service & A/C</span></div>
+        </div>
+        <button onClick={() => setView('settings')} className="p-2 text-slate-400 hover:text-white"><Settings className="w-6 h-6" /></button>
+      </header>
+
+      <main className="p-4 max-w-xl mx-auto">
+        {view === 'dashboard' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <button onClick={() => setFilterMode(filterMode === 'active' ? 'all' : 'active')} className={`p-5 rounded-3xl border text-left shadow-xl ${filterMode === 'active' ? 'bg-indigo-900/30 border-indigo-500' : 'bg-slate-900 border-slate-800'}`}>
+                <span className="text-[10px] font-black text-slate-500 uppercase block mb-1">En Taller</span><span className="text-4xl font-black text-indigo-500">{stats.active}</span>
+              </button>
+              <button onClick={() => setFilterMode(filterMode === 'ready' ? 'all' : 'ready')} className={`p-5 rounded-3xl border text-left shadow-xl ${filterMode === 'ready' ? 'bg-green-900/30 border-green-500' : 'bg-slate-900 border-slate-800'}`}>
+                <span className="text-[10px] font-black text-slate-500 uppercase block mb-1">Listos</span><span className="text-4xl font-black text-green-500">{stats.ready}</span>
+              </button>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setFilterMode('all'); setView('register'); }} className="flex-1 bg-indigo-600 text-white p-4 rounded-2xl flex items-center justify-center gap-2 font-bold shadow-lg shadow-indigo-900 active:scale-95 transition-all"><Plus className="w-5 h-5" /> Nueva Orden</button>
+              <div className="relative flex-1"><Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" /><input type="text" placeholder="Buscar Tablilla..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-4 bg-slate-900 border border-slate-800 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm" /></div>
+            </div>
+            <div className="space-y-3">
+              {filteredOrders.length > 0 ? (filteredOrders.map(o => <OrderCard key={o.id} order={o} client={clients.find(c => c.id === o.clientId)} onClick={() => { setSelectedOrder(o); setView('details'); }} />)) : (<div className="text-center py-20 bg-slate-900/50 rounded-3xl border border-dashed border-slate-800"><Car className="w-12 h-12 mx-auto text-slate-800 mb-2" /><p className="text-slate-600 font-bold">Sin registros</p></div>)}
+            </div>
+          </div>
+        )}
+
+        {view === 'register' && <RegistrationProcess clients={clients} setClients={setClients} onSave={(newOrder: ServiceOrder) => { handleSaveOrder(newOrder); setFilterMode('all'); setView('dashboard'); }} onCancel={() => setView('dashboard')} />}
+        {view === 'details' && selectedOrder && <OrderDetails order={selectedOrder} client={clients.find(c => c.id === selectedOrder.clientId)} onClose={() => setView('dashboard')} onUpdateOrder={handleUpdateOrder} onDelete={() => { if(confirm('¿Borrar orden?')) { setOrders(orders.filter(o => o.id !== selectedOrder.id)); setView('dashboard'); }}} onViewReceipt={() => setView('receipt')} />}
+        {view === 'receipt' && selectedOrder && <ReceiptView order={selectedOrder} client={clients.find(c => c.id === selectedOrder.clientId)} onClose={() => setView('details')} />}
+        {view === 'settings' && <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-6"><div className="flex items-center gap-3"><button onClick={() => setView('dashboard')} className="p-2 bg-slate-800 rounded-full"><ArrowLeft /></button><h2 className="text-xl font-black">Configuración</h2></div><p className="text-slate-400 text-sm">Versión 1.0.0 - Conectado a Google Sheets</p></div>}
+      </main>
+
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 p-2 flex justify-around items-center no-print">
+        <NavButton active={view === 'dashboard'} icon={LayoutDashboard} label="Inicio" onClick={() => { setFilterMode('all'); setView('dashboard'); }} />
+        <NavButton active={view === 'register'} icon={Plus} label="Nueva" onClick={() => setView('register')} highlight />
+        <NavButton active={view === 'settings'} icon={Settings} label="Ajustes" onClick={() => setView('settings')} />
+      </nav>
+    </div>
+  );
+}
+
+// --- COMPONENTES ---
+
+const NavButton = ({ icon: Icon, label, active, onClick, highlight }: any) => (
+  <button onClick={onClick} className={`flex flex-col items-center gap-1 p-2 ${highlight ? 'bg-indigo-600 text-white rounded-2xl -mt-10 w-16 h-16 shadow-2xl transition-all active:scale-95' : active ? 'text-indigo-400' : 'text-slate-500'}`}>
+    <Icon className={highlight ? 'w-8 h-8' : 'w-5 h-5'} />{!highlight && <span className="text-[10px] font-bold uppercase">{label}</span>}
+  </button>
+);
+
+const OrderCard = ({ order, client, onClick }: any) => {
+  const status = statusConfig[order.status];
+  const vehicle = client?.garage.find((v: any) => v.id === order.vehicleId);
+  return (
+    <div onClick={onClick} className="bg-slate-900 p-4 rounded-3xl border border-slate-800 hover:border-slate-700 transition-all cursor-pointer flex items-center gap-4 active:scale-[0.98]">
+      <div className={`w-12 h-12 rounded-2xl ${status.color.split(' ')[0]} flex items-center justify-center shrink-0`}><status.icon className="w-6 h-6" /></div>
+      <div className="flex-grow min-w-0"><div className="flex justify-between items-start mb-0.5"><h3 className="font-black text-white uppercase tracking-tighter truncate">{client?.name} • {vehicle?.brand}</h3><span className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase border shrink-0 ${status.color}`}>{status.label}</span></div><p className="text-[10px] text-slate-500 font-black uppercase tracking-widest truncate">TABLILLA: {vehicle?.plate || 'S/T'}</p></div><ChevronRight className="w-5 h-5 text-slate-700 shrink-0" />
+    </div>
+  );
+};
+
+const RegistrationProcess = ({ clients, setClients, onSave, onCancel }: any) => {
+  const [step, setStep] = useState(1);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientForm, setClientForm] = useState({ name: '', phone: '', email: '' });
+  const [vehicleForm, setVehicleForm] = useState({ plate: '', brand: '', model: '', year: '2024', color: '' });
+  const [orderForm, setOrderForm] = useState({ miles: '', description: '', servicePerformedNotes: '', applyIVU: true });
+  const [items, setItems] = useState<LineItem[]>([]);
+  const [tempService, setTempService] = useState({ description: '', price: '' });
+  const [inspectionParts, setInspectionParts] = useState<InspectionPart[]>(DEFAULT_INSPECTION_PARTS);
+
+  const currentSubtotal = useMemo(() => items.reduce((acc, i) => acc + i.price, 0), [items]);
+  const currentIVU = useMemo(() => orderForm.applyIVU ? currentSubtotal * 0.115 : 0, [currentSubtotal, orderForm.applyIVU]);
+  const currentTotal = useMemo(() => currentSubtotal + currentIVU, [currentSubtotal, currentIVU]);
+
+  const filteredClients = useMemo(() => {
+    const s = clientSearch.trim().toLowerCase();
+    if (!s) return [];
+    return clients.filter((c: Client) => c.name.toLowerCase().includes(s) || c.phone.includes(s));
+  }, [clients, clientSearch]);
+
+  const togglePart = (id: string) => setInspectionParts(prev => prev.map(p => p.id === id ? { ...p, damaged: !p.damaged } : p));
+  const handleAddService = () => { if (!tempService.description.trim()) return; setItems(prev => [...prev, { description: tempService.description, price: parseFloat(tempService.price) || 0 }]); setTempService({ description: '', price: '' }); };
+  const handleCreateOrder = () => {
+    let finalClient = selectedClient;
+    let finalVehicle = selectedVehicle;
+    if (!finalClient) { const newClient = { id: Date.now().toString(), ...clientForm, garage: [] }; setClients((prev: Client[]) => [...prev, newClient]); finalClient = newClient; }
+    if (!finalVehicle) { const newVehicle = { id: (Date.now() + 1).toString(), ...vehicleForm }; const updatedClient = { ...finalClient, garage: [...finalClient.garage, newVehicle] }; setClients((prev: Client[]) => prev.map(c => c.id === finalClient?.id ? updatedClient : c)); finalVehicle = newVehicle; finalClient = updatedClient; }
+    const newOrder: ServiceOrder = { id: `ORD-${Date.now()}`, clientId: finalClient.id, vehicleId: finalVehicle.id, ...orderForm, items, subtotal: currentSubtotal, tax: currentIVU, total: currentTotal, status: 'recibido', entryDate: new Date().toISOString(), inspection: { parts: inspectionParts.filter(p => p.damaged), notes: '' } };
+    onSave(newOrder);
+  };
+
+  return (
+    <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
+      <div className="p-6 bg-slate-800 flex justify-between items-center"><h2 className="font-black flex items-center gap-2">{step === 1 ? 'CLIENTE' : step === 2 ? 'VEHÍCULO' : step === 3 ? 'INSPECCIÓN' : 'SERVICIO'}</h2><span className="text-[10px] font-black text-slate-400">PASO {step}/4</span></div>
+      <div className="p-6 space-y-6">
+        {step === 1 && (
+          <div className="space-y-4">
+            <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-4 h-4" /><input placeholder="Buscar cliente..." className="w-full pl-10 pr-4 py-3 bg-slate-950 border border-slate-800 rounded-xl outline-none" value={clientSearch} onChange={e => setClientSearch(e.target.value)} /></div>
+            {filteredClients.length > 0 && (<div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar p-1">{filteredClients.map((c: Client) => (<button key={c.id} onClick={() => { setSelectedClient(c); setStep(2); }} className="w-full p-3 bg-slate-800/50 text-left rounded-xl border border-slate-700 flex justify-between hover:bg-slate-800"><div><p className="font-bold text-sm">{c.name}</p><p className="text-[10px] text-slate-500">{c.phone}</p></div><ChevronRight className="w-4 h-4 text-indigo-400" /></button>))}</div>)}
+            <div className="pt-4 border-t border-slate-800"><p className="text-[10px] font-black text-slate-500 uppercase mb-3">Nuevo Cliente</p><Input label="Nombre" value={clientForm.name} onChange={(v: string) => setClientForm({...clientForm, name: v})} /><Input label="Teléfono" value={clientForm.phone} onChange={(v: string) => setClientForm({...clientForm, phone: formatPhone(v)})} /></div>
+          </div>
+        )}
+        {step === 2 && (
+          <div className="space-y-4">
+             {selectedClient && selectedClient.garage.length > 0 && (<div className="grid grid-cols-2 gap-2">{selectedClient.garage.map((v: Vehicle) => (<button key={v.id} onClick={() => { setSelectedVehicle(v); setStep(3); }} className="p-3 bg-indigo-900/20 border border-indigo-900/50 rounded-xl text-left"><p className="text-xs font-black truncate">{v.plate}</p><p className="text-[9px] text-slate-400 truncate">{v.brand}</p></button>))}</div>)}
+             <div className="pt-4 border-t border-slate-800"><p className="text-[10px] font-black text-slate-500 uppercase mb-3">Nuevo Vehículo</p><div className="grid grid-cols-2 gap-3"><Input label="Marca" value={vehicleForm.brand} onChange={(v: string) => setVehicleForm({...vehicleForm, brand: v})} /><Input label="Modelo" value={vehicleForm.model} onChange={(v: string) => setVehicleForm({...vehicleForm, model: v})} /><Input label="Tablilla" value={vehicleForm.plate} onChange={(v: string) => setVehicleForm({...vehicleForm, plate: formatPlate(v)})} /><Input label="Año" value={vehicleForm.year} onChange={(v: string) => setVehicleForm({...vehicleForm, year: v})} /></div><Input label="Millas" value={orderForm.miles} onChange={(v: string) => setOrderForm({...orderForm, miles: v})} /></div>
+          </div>
+        )}
+        {step === 3 && (<div className="grid grid-cols-2 gap-2 max-h-64 overflow-y-auto custom-scrollbar p-1">{inspectionParts.map(part => (<button key={part.id} onClick={() => togglePart(part.id)} className={`p-3 rounded-xl border text-[10px] font-bold text-left flex justify-between items-center ${part.damaged ? 'bg-red-900/30 border-red-500 text-red-200' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>{part.label}{part.damaged && <AlertCircle className="w-3 h-3 text-red-500" />}</button>))}</div>)}
+        {step === 4 && (
+          <div className="space-y-4">
+             <div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">Falla Reportada</label><textarea className="w-full p-4 bg-slate-950 border border-slate-800 rounded-2xl h-16 outline-none text-sm" value={orderForm.description} onChange={e => setOrderForm({...orderForm, description: e.target.value})} placeholder="Describe la falla..." /></div>
+             <div className="flex gap-2"><select className="flex-grow p-3 bg-slate-950 border border-slate-800 rounded-xl outline-none text-sm" value={tempService.description} onChange={(e) => setTempService({ ...tempService, description: e.target.value })}><option value="">-- Servicio --</option>{COMMON_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}</select><input type="number" placeholder="$" value={tempService.price} onChange={e => setTempService({ ...tempService, price: e.target.value })} className="w-20 p-3 bg-slate-950 border border-slate-800 rounded-xl text-sm outline-none" /><button onClick={handleAddService} className="p-3 bg-indigo-600 text-white rounded-xl"><Plus className="w-5 h-5" /></button></div>
+             <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar">{items.map((it, idx) => (<div key={idx} className="flex justify-between items-center p-3 bg-slate-800 rounded-xl border border-slate-700"><span className="text-xs font-bold">{it.description}</span><div className="flex items-center gap-3"><span className="text-xs font-black text-indigo-400">${it.price.toFixed(2)}</span><button onClick={() => setItems(items.filter((_, i) => i !== idx))}><Trash2 className="w-4 h-4 text-red-500" /></button></div></div>))}</div>
+             <div className="pt-2 border-t border-slate-800 space-y-1 text-right"><div className="flex justify-between text-lg font-black text-white pt-1"><span>TOTAL</span><span className="text-green-400">${currentTotal.toFixed(2)}</span></div></div>
+          </div>
+        )}
+        <div className="flex gap-3 pt-4"><button onClick={onCancel} className="flex-1 py-4 bg-slate-800 text-slate-400 font-bold rounded-2xl">Cancelar</button>{step > 1 && <button onClick={() => setStep(step - 1)} className="flex-1 py-4 bg-slate-700 text-white font-bold rounded-2xl">Atrás</button>}<button onClick={() => { if (step === 1 && (selectedClient || clientForm.name)) setStep(2); else if (step === 2 && (selectedVehicle || vehicleForm.plate)) setStep(3); else if (step === 3) setStep(4); else if (step === 4) handleCreateOrder(); }} className="flex-2 py-4 bg-indigo-600 text-white font-bold rounded-2xl shadow-xl">{step === 4 ? 'Finalizar' : 'Siguiente'}</button></div>
+      </div>
+    </div>
+  );
+};
+
+const OrderDetails = ({ order, client, onClose, onUpdateOrder, onDelete, onViewReceipt }: any) => {
+  const vehicle = client?.garage.find((v: any) => v.id === order.vehicleId);
+  const [notes, setNotes] = useState(order.servicePerformedNotes || '');
+  return (
+    <div className="bg-slate-900 rounded-3xl border border-slate-800 overflow-hidden shadow-2xl animate-in slide-in-from-right-4">
+      <div className="p-8 bg-slate-800 text-center relative border-b border-slate-700"><button onClick={onClose} className="absolute top-4 left-4 p-2 bg-slate-900/50 rounded-full hover:bg-slate-900 transition-colors"><ArrowLeft className="w-5 h-5" /></button><h2 className="text-3xl font-black text-white uppercase tracking-tighter">{vehicle?.plate || 'S/T'}</h2><p className="text-xs font-bold text-indigo-400 uppercase tracking-widest">{client?.name}</p></div>
+      <div className="p-6 space-y-6">
+        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800"><p className="text-[10px] font-black text-slate-500 uppercase mb-2">Reporte del Cliente</p><p className="text-sm italic text-slate-300">"{order.description}"</p></div>
+        <div className="space-y-2"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">Notas del Técnico</label><textarea className="w-full p-4 bg-slate-950 border border-slate-800 rounded-2xl h-24 outline-none text-sm" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notas..." /><button onClick={() => onUpdateOrder({ ...order, servicePerformedNotes: notes })} className="w-full text-xs font-bold bg-indigo-600 text-white py-2 rounded-lg">Guardar Notas</button></div>
+        <div className="space-y-2"><p className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1"><Clock className="w-3 h-3" /> Estado</p><div className="grid grid-cols-2 gap-2">{(Object.keys(statusConfig) as ServiceStatus[]).map(s => (<button key={s} onClick={() => onUpdateOrder({ ...order, status: s })} className={`text-[9px] font-black p-3 rounded-xl border transition-all ${order.status === s ? `${statusConfig[s].color} border-current ring-2 ring-indigo-500` : 'bg-slate-800 border-slate-700 text-slate-500'}`}>{statusConfig[s].label}</button>))}</div></div>
+        <div className="pt-4 border-t border-slate-800 flex gap-4"><button onClick={onViewReceipt} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2"><FileText className="w-5 h-5" /> Recibo</button><button onClick={onDelete} className="p-4 bg-red-900/20 text-red-500 border border-red-900/50 rounded-2xl"><Trash2 className="w-5 h-5" /></button></div>
+      </div>
+    </div>
+  );
+};
+
+const ReceiptView = ({ order, client, onClose }: any) => {
+  const vehicle = client?.garage.find((v: any) => v.id === order.vehicleId);
+  return (
+    <div className="pb-10">
+      <div className="flex items-center gap-3 mb-6 no-print"><button onClick={onClose} className="p-2 bg-slate-900 rounded-full"><ArrowLeft /></button><h2 className="text-xl font-black">Recibo</h2></div>
+      <div className="printable-area bg-white p-8 border border-slate-200 shadow-2xl text-slate-900 space-y-8 rounded-none md:rounded-3xl overflow-hidden">
+        <div className="text-center space-y-2"><h1 className="text-3xl font-black tracking-tighter">JAISON AUTO REPAIR</h1><p className="text-xs font-bold text-slate-500">San Juan, PR</p></div>
+        <div className="grid grid-cols-2 gap-8 text-xs border-y border-slate-100 py-4"><div className="space-y-1"><span className="font-black text-slate-400 uppercase">Cliente</span><p className="font-black text-sm">{client?.name}</p><p>{client?.phone}</p></div><div className="text-right space-y-1"><span className="font-black text-slate-400 uppercase">Total</span><p className="font-black text-2xl">${order.total.toFixed(2)}</p></div></div>
+        <table className="w-full text-sm"><thead><tr className="border-b-2 border-slate-900 text-[10px] font-black text-slate-400 uppercase"><th className="text-left pb-2">Servicio</th><th className="text-right pb-2">Precio</th></tr></thead><tbody className="divide-y divide-slate-100">{order.items.map((i: any, idx: number) => (<tr key={idx}><td className="py-3 font-medium">{i.description}</td><td className="py-3 text-right font-black">${i.price.toFixed(2)}</td></tr>))}</tbody></table>
+      </div>
+      <div className="grid grid-cols-2 gap-4 mt-8 no-print"><button onClick={() => window.print()} className="py-4 bg-slate-100 text-slate-900 rounded-2xl font-black flex items-center justify-center gap-2"><Printer className="w-5 h-5" /> IMPRIMIR</button><button onClick={() => { const text = `Recibo Jaison Auto Repair\nCliente: ${client.name}\nTotal: $${order.total.toFixed(2)}`; window.open(`https://wa.me/?text=${encodeURIComponent(text)}`); }} className="py-4 bg-green-600 text-white rounded-2xl font-black flex items-center justify-center gap-2"><MessageCircle className="w-5 h-5" /> WHATSAPP</button></div>
+    </div>
+  );
+};
+
+const Input = ({ label, value, onChange, placeholder }: any) => (<div className="space-y-1"><label className="text-[10px] font-black text-slate-500 uppercase ml-1">{label}</label><input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="w-full p-4 bg-slate-950 border border-slate-800 rounded-2xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none" /></div>);
+
+export default App;

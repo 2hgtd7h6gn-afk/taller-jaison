@@ -1,0 +1,17 @@
+{
+  "short_name": "Taller Jaison",
+  "name": "Jaison Auto Repair",
+  "description": "Gestión de taller mecánico",
+  "icons": [
+    {
+      "src": "logo.png",
+      "type": "image/png",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a",
+  "orientation": "portrait"
+}
