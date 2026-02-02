@@ -7,17 +7,22 @@ import {
   X, CreditCard, History, CalendarDays, Archive, Mail, Link as LinkIcon
 } from 'lucide-react';
 
-// --- FUNCIONES AUXILIARES (CON CORRECCIÓN DE TILDES Y LIMPIEZA) ---
+// --- FUNCIONES AUXILIARES (UTF-8 + URL SAFE) ---
 const safeBtoa = (str: string) => {
-  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
-      // Usamos '_' para indicar que el primer argumento no se usa (Fix TypeScript)
-      function toSolidBytes(_: any, p1: any) {
+  // 1. Manejo de tildes/emojis
+  const utf8Bytes = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+      function (_: any, p1: any) {
           return String.fromCharCode(parseInt(p1, 16));
-  }));
+  });
+  // 2. Base64 estándar
+  return btoa(utf8Bytes);
 };
 
 const safeAtob = (str: string) => {
-  return decodeURIComponent(atob(str).split('').map(function(c: any) {
+  // 1. Base64 a bytes
+  const bytes = atob(str);
+  // 2. Bytes a UTF-8 (Tildes)
+  return decodeURIComponent(bytes.split('').map(function(c: any) {
       return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
   }).join(''));
 };
@@ -140,7 +145,6 @@ const formatPhone = (val: string) => {
   return v;
 };
 
-// --- EL ÍCONO PERDIDO (RESTAURADO) ---
 const WhatsAppIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
     <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
@@ -149,8 +153,24 @@ const WhatsAppIcon = () => (
 
 // --- COMPONENTE PRINCIPAL ---
 function App() {
-  const [sharedReceiptData, setSharedReceiptData] = useState<{order: ServiceOrder, client: Client} | null>(null);
-  const [receiptError, setReceiptError] = useState<string | null>(null);
+  // LÓGICA DE VELOCIDAD: Se ejecuta ANTES de pintar nada en pantalla
+  const [sharedReceiptData, setSharedReceiptData] = useState<{order: ServiceOrder, client: Client} | null>(() => {
+    // Verificamos la URL directamente al iniciar la App
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const receiptData = params.get('r');
+      if (receiptData) {
+        try {
+          const jsonString = safeAtob(receiptData);
+          return JSON.parse(jsonString);
+        } catch (e) {
+          console.error("Error decodificando al inicio", e);
+          return null;
+        }
+      }
+    }
+    return null;
+  });
 
   const [view, setView] = useState<'dashboard' | 'register' | 'history' | 'details' | 'settings' | 'receipt'>('dashboard');
   const [clients, setClients] = useState<Client[]>([]);
@@ -159,28 +179,15 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'active' | 'ready'>('all');
 
+  // Solo cargar LocalStorage si NO estamos en modo recibo (mejora rendimiento)
   useEffect(() => {
-    // 1. Detección de Recibo Compartido
-    const params = new URLSearchParams(window.location.search);
-    const receiptData = params.get('r');
-    
-    if (receiptData) {
-        try {
-            const jsonString = safeAtob(receiptData);
-            const decoded = JSON.parse(jsonString);
-            setSharedReceiptData(decoded);
-        } catch (e) {
-            console.error("Error decodificando recibo", e);
-            setReceiptError("El enlace del recibo parece estar incompleto o dañado.");
-        }
-    } else {
-        // 2. Carga normal
+    if (!sharedReceiptData) {
         const savedClients = localStorage.getItem('jaison_clients');
         if (savedClients) setClients(JSON.parse(savedClients));
         const savedOrders = localStorage.getItem('jaison_orders');
         if (savedOrders) setOrders(JSON.parse(savedOrders));
     }
-  }, []);
+  }, [sharedReceiptData]);
 
   useEffect(() => {
     if (!sharedReceiptData && clients.length > 0) localStorage.setItem('jaison_clients', JSON.stringify(clients));
@@ -190,7 +197,7 @@ function App() {
     if (!sharedReceiptData && orders.length > 0) localStorage.setItem('jaison_orders', JSON.stringify(orders));
   }, [orders, sharedReceiptData]);
 
-  // --- MODO INVITADO ---
+  // --- MODO INVITADO (PRIORIDAD ALTA - EVITA PINTAR EL DASHBOARD) ---
   if (sharedReceiptData) {
       return (
         <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
@@ -204,21 +211,7 @@ function App() {
       );
   }
 
-  // --- MODO ERROR ---
-  if (receiptError) {
-      return (
-          <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-center">
-              <div className="bg-slate-800 p-8 rounded-3xl border border-red-500/50 max-w-sm">
-                  <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">Enlace Inválido</h3>
-                  <p className="text-slate-400 text-sm mb-6">{receiptError}</p>
-                  <a href="/" className="bg-indigo-600 text-white py-3 px-6 rounded-xl font-bold text-sm">Ir al Inicio</a>
-              </div>
-          </div>
-      );
-  }
-
-  // --- MODO ADMIN ---
+  // --- MODO ADMIN (JAISON) ---
   const handleSaveOrder = async (newOrder: ServiceOrder, directClient?: Client, directVehicle?: Vehicle) => {
     setOrders(prev => {
         const exists = prev.some(o => o.id === newOrder.id);
@@ -966,7 +959,6 @@ const OrderDetails = ({ order, client, onClose, onUpdateOrder, onDelete, onViewR
 const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
     const vehicle = client?.garage.find((v: any) => v.id === order.vehicleId);
     
-    // CORRECCIÓN TS7006: Definimos el tipo de 'p'
     const totalPaid = order.payments?.reduce((sum: number, p: any) => sum + p.amount, 0) || 0;
     const remainingBalance = order.total - totalPaid;
     const isFullyPaid = remainingBalance <= 0.01;
@@ -975,32 +967,44 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
         ? new Date(order.payments[order.payments.length - 1].date).toLocaleString() 
         : new Date().toLocaleString();
 
-    // GENERAR LINK "ESTILO CLOVER"
+    // GENERAR LINK "ESTILO CLOVER" - Versión Segura URL
     const generateSharedLink = () => {
         const data = JSON.stringify({ order, client });
-        // Usamos la nueva función segura para tildes
-        const encoded = safeBtoa(data); 
+        // Encodificamos el resultado para que sea seguro en URL
+        const encoded = encodeURIComponent(safeBtoa(data)); 
         return `https://taller-jaison.vercel.app/?r=${encoded}`;
     };
 
+    // --- MENSAJES AUTOMATIZADOS ---
     const shareWhatsapp = () => {
         const link = generateSharedLink();
-        const text = `*JAISON AUTO REPAIR*\nHola ${client.name}, ve tu recibo aquí:\n${link}`;
-        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        // Limpiamos el teléfono (solo números)
+        const cleanPhone = client.phone.replace(/\D/g, ''); 
+        const text = `*JAISON AUTO REPAIR*\nHola ${client.name}\n${link}`;
+        
+        // Si hay teléfono, abrimos el chat directo
+        if(cleanPhone) {
+            window.open(`https://wa.me/1${cleanPhone}?text=${encodeURIComponent(text)}`);
+        } else {
+            // Si no, abrimos WhatsApp general para elegir contacto
+            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        }
     };
+
     const shareSMS = () => {
         const link = generateSharedLink();
-        const text = `JAISON AUTO REPAIR: Hola ${client.name}, ve tu recibo aqui: ${link}`;
-        window.open(`sms:${client.phone}?body=${encodeURIComponent(text)}`);
+        const cleanPhone = client.phone.replace(/\D/g, ''); 
+        const text = `JAISON AUTO REPAIR: Hola ${client.name} ${link}`;
+        window.open(`sms:${cleanPhone}?body=${encodeURIComponent(text)}`);
     };
+
     const shareEmail = () => {
         const link = generateSharedLink();
-        const subject = `Recibo de Servicio - ${vehicle.plate}`;
-        const body = `Hola ${client.name},\n\nAquí tienes el resumen de tu servicio en JAISON AUTO REPAIR.\n\nPuedes ver el recibo detallado en este enlace:\n${link}\n\nGracias por tu preferencia.`;
+        const subject = `Recibo Jaison Auto Repair - ${vehicle.plate}`;
+        const body = `Hola ${client.name},\n\nAquí tienes el resumen de tu servicio:\n${link}\n\nGracias por tu preferencia.`;
         window.open(`mailto:${client.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
     };
     
-    // Botón extra solo para copiar el link
     const copyLink = async () => {
         const link = generateSharedLink();
         if (navigator.clipboard) {
@@ -1037,7 +1041,6 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
                     <img src="/logo.png" alt="Jaison Auto Repair Logo" className="w-32 h-auto object-contain" />
                 </div>
                 
-                {/* --- SECCIÓN DE DIRECCIÓN ACTUALIZADA --- */}
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-black mb-2">JAISON AUTO REPAIR</h1>
                     <div className="text-xs font-medium text-slate-600 space-y-1">
