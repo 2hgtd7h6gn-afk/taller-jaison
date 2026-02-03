@@ -7,24 +7,38 @@ import {
   X, CreditCard, History, CalendarDays, Archive, Mail, Link as LinkIcon
 } from 'lucide-react';
 
-// --- FUNCIONES DE ENCRIPTACIÓN ROBUSTAS (UTF-8 SAFE) ---
-// Estas funciones manejan tildes y emojis sin romper el enlace
+// --- FUNCIONES DE ENCRIPTACIÓN ROBUSTAS ---
 const safeEncode = (obj: any) => {
   try {
+    // 1. Convertir objeto a texto JSON
     const str = JSON.stringify(obj);
-    return btoa(unescape(encodeURIComponent(str)));
+    // 2. Codificar tildes y ñ a formato seguro
+    const utf8Bytes = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
+        function (_: any, p1: any) {
+            return String.fromCharCode(parseInt(p1, 16));
+    });
+    // 3. Convertir a Base64
+    return btoa(utf8Bytes);
   } catch (e) {
-    console.error("Error al crear enlace", e);
+    console.error("Error codificando", e);
     return "";
   }
 };
 
 const safeDecode = (str: string) => {
   try {
-    const json = decodeURIComponent(escape(atob(str)));
+    // TRUCO: Si el link tiene espacios en lugar de '+', los reparamos
+    const fixedStr = str.replace(/ /g, '+');
+    // 1. Decodificar Base64
+    const bytes = atob(fixedStr);
+    // 2. Decodificar UTF-8 (Tildes)
+    const json = decodeURIComponent(bytes.split('').map(function(c: any) {
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    // 3. Convertir a objeto
     return JSON.parse(json);
   } catch (e) {
-    console.error("Error al leer enlace", e);
+    console.error("Error decodificando", e);
     return null;
   }
 };
@@ -155,8 +169,7 @@ const WhatsAppIcon = () => (
 
 // --- COMPONENTE PRINCIPAL ---
 function App() {
-  // LÓGICA DE VELOCIDAD: Inicializamos el recibo ANTES de pintar nada
-  // CORREGIDO: Eliminamos el segundo argumento del useState que causaba el error TS6133
+  // Lógica de carga inmediata para el recibo
   const [sharedReceiptData] = useState<{order: ServiceOrder, client: Client} | null>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -176,7 +189,6 @@ function App() {
   const [filterMode, setFilterMode] = useState<'all' | 'active' | 'ready'>('all');
 
   useEffect(() => {
-    // Solo cargamos datos del localStorage si NO estamos viendo un recibo
     if (!sharedReceiptData) {
         const savedClients = localStorage.getItem('jaison_clients');
         if (savedClients) setClients(JSON.parse(savedClients));
@@ -964,28 +976,24 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
         ? new Date(order.payments[order.payments.length - 1].date).toLocaleString() 
         : new Date().toLocaleString();
 
-    // GENERAR LINK "ESTILO CLOVER" - Versión Segura URL
+    // GENERAR LINK "ESTILO CLOVER" - Versión Segura URL (BLINDADA)
     const generateSharedLink = () => {
         const data = { order, client };
-        // Usamos el método robusto clásico (JSON -> encodeURIComponent -> unescape -> btoa)
-        const encoded = safeEncode(data);
+        // Paso clave: encodeURIComponent al final para proteger símbolos como '+'
+        const encoded = encodeURIComponent(safeEncode(data));
         return `https://taller-jaison.vercel.app/?r=${encoded}`;
     };
 
-    // --- MENSAJES AUTOMATIZADOS (CORREGIDOS) ---
+    // --- MENSAJES AUTOMATIZADOS (CON LINK BLINDADO) ---
     const shareWhatsapp = () => {
         const link = generateSharedLink();
-        // Limpiamos el teléfono (solo números)
         const cleanPhone = client.phone.replace(/\D/g, ''); 
         const text = `*JAISON AUTO REPAIR*\nHola ${client.name}\n${link}`;
-        
-        // CORRECCIÓN: Forzamos el código de área +1 si no lo tiene, para abrir chat directo
         const phoneWithCountry = cleanPhone.length === 10 ? `1${cleanPhone}` : cleanPhone;
 
         if(cleanPhone) {
             window.open(`https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(text)}`);
         } else {
-            // Si no hay teléfono registrado, abrimos WhatsApp general
             window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
         }
     };
@@ -1004,7 +1012,6 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
         window.open(`mailto:${client.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
     };
     
-    // Botón extra solo para copiar el link
     const copyLink = async () => {
         const link = generateSharedLink();
         if (navigator.clipboard) {
@@ -1041,7 +1048,6 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
                     <img src="/logo.png" alt="Jaison Auto Repair Logo" className="w-32 h-auto object-contain" />
                 </div>
                 
-                {/* --- SECCIÓN DE DIRECCIÓN ACTUALIZADA --- */}
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-black mb-2">JAISON AUTO REPAIR</h1>
                     <div className="text-xs font-medium text-slate-600 space-y-1">
