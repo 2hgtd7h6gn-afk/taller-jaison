@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN ---
-// ✅ CORREGIDO: URL entre comillas
+// ✅ CORREGIDO: URL ENTRE COMILLAS
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxcIeywb9sOLBhgUjVPlUz20RORtzJo-ycAx50nTnx3SKxGF49Wna-M2uCW8hJYcsbo/exec";
 const API_TOKEN = "TALLER_JAISON_SECURE_2026";
 
@@ -740,7 +740,7 @@ const RegistrationProcess = ({ clients, setClients, onSave, onCancel }: any) => 
                   <span>${currentSubtotal.toFixed(2)}</span>
                 </div>
                 {orderForm.applyIVU && (
-                  <div className="flex justify-between text-[10px] font-bold text-indigo-400">
+                  <div className="flex justify-between text--[10px] font-bold text-indigo-400">
                     <span>IVU (11.5%)</span>
                     <span>${currentIVU.toFixed(2)}</span>
                   </div>
