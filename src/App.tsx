@@ -9,128 +9,32 @@ import {
 
 // --- CONFIGURACIÓN ---
 // TU URL NUEVA YA ESTÁ AQUÍ 👇
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyqSWhLGvtmoFrwsAn_sEJEj_rdgbJJpr-ctRFGptVV66bKVqwGRGRtqUoi2SqfGKIU/exec";
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzo_epDny1AcNXwL0y8DuhhWS-SWBxY8iKJRziUPgtHn36EVJx9eOmVtInbQIIKEXsJ/exec";
 const API_TOKEN = "TALLER_JAISON_SECURE_2026";
 
-// --- FUNCIONES DE ENCRIPTACIÓN ROBUSTAS ---
-const safeEncode = (obj: any) => {
-  try {
-    const str = JSON.stringify(obj);
-    const utf8Bytes = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
-        function (_: any, p1: any) {
-            return String.fromCharCode(parseInt(p1, 16));
-    });
-    return btoa(utf8Bytes);
-  } catch (e) {
-    console.error("Error codificando", e);
-    return "";
-  }
-};
-
-const safeDecode = (str: string) => {
-  try {
-    const fixedStr = str.replace(/ /g, '+');
-    const bytes = atob(fixedStr);
-    const json = decodeURIComponent(bytes.split('').map(function(c: any) {
-        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(''));
-    return JSON.parse(json);
-  } catch (e) {
-    console.error("Error decodificando", e);
-    return null;
-  }
-};
-
-// --- Tipos y Modelos ---
+// --- TIPOS Y MODELOS ---
 type ServiceStatus = 'recibido' | 'diagnostico' | 'espera_repuestos' | 'reparacion' | 'listo' | 'entregado';
 
-interface Vehicle {
-  id: string;
-  plate: string;
-  brand: string;
-  model: string;
-  year: string;
-  color: string;
-}
-
-interface LineItem {
-  description: string;
-  price: number;
-}
-
-interface InspectionPart {
-  id: string;
-  label: string;
-  damaged: boolean;
-}
-
-interface Inspection {
-  parts: InspectionPart[];
-  notes: string;
-}
-
-interface Payment {
-  id: string;
-  date: string;
-  amount: number;
-  method: string;
-  type: 'total' | 'partial';
-  note: string;
-}
+interface Vehicle { id: string; plate: string; brand: string; model: string; year: string; color: string; }
+interface LineItem { description: string; price: number; }
+interface InspectionPart { id: string; label: string; damaged: boolean; }
+interface Inspection { parts: InspectionPart[]; notes: string; }
+interface Payment { id: string; date: string; amount: number; method: string; type: 'total' | 'partial'; note: string; }
 
 interface ServiceOrder {
-  id: string;
-  vehicleId: string;
-  clientId: string;
-  description: string;
-  servicePerformedNotes?: string;
-  status: ServiceStatus;
-  entryDate: string;
-  miles: string;
-  items: LineItem[];
-  subtotal: number;
-  tax: number;
-  total: number;
-  applyIVU: boolean;
-  inspection: Inspection;
-  payments: Payment[]; 
-  isPaid: boolean;
+  id: string; vehicleId: string; clientId: string; description: string; servicePerformedNotes?: string;
+  status: ServiceStatus; entryDate: string; miles: string; items: LineItem[];
+  subtotal: number; tax: number; total: number; applyIVU: boolean;
+  inspection: Inspection; payments: Payment[]; isPaid: boolean;
 }
 
-interface Client {
-  id: string;
-  name: string;
-  phone: string;
-  email: string;
-  garage: Vehicle[];
-}
+interface Client { id: string; name: string; phone: string; email: string; garage: Vehicle[]; }
 
 // --- CONSTANTES ---
-const PAYMENT_METHODS = [
-  "Efectivo", "Ath Móvil", "Tarjeta de débito", "Tarjeta de crédito", "Cheque"
-];
-
-const RAW_PARTS_LIST = [
-  "Bonete", "Foco delantero Izq", "Foco delantero Der", "Foglight frontal Izq", "Foglight delantero Der",
-  "Whipers", "Bumper Delantero", "Guardalodo del. Der", "Guardalodo del. Izq",
-  "Goma delantera Der", "Goma delantera Izq", "Cristal frontal", "Puerta frontal Izq", "Puerta frontal Der",
-  "Ventana frontal Izq", "Ventana frontal Der", "Retrovisor Izq", "Retrovisor Der",
-  "Capota", "Sunroof", "Spoiler", "Antena", "Panel trasero Izq", "Panel trasero Der", 
-  "Puerta trasera Izq", "Puerta trasera Der", "Ventana trasera Izq", "Ventana trasera Der", 
-  "Baúl", "Puerta de baúl", "Foco de Stop Der", "Foco de Stop Izq", "Luces de Reversa", 
-  "Bumper trasero", "Muffler", "Cámara de Reversa", "Tablilla"
-];
-
-const DEFAULT_INSPECTION_PARTS: InspectionPart[] = RAW_PARTS_LIST.map((label, index) => ({
-  id: `part_${index}`,
-  label: label,
-  damaged: false
-}));
-
-const COMMON_SERVICES = [
-  "Cambio de Aceite y Filtro", "Lavado de Chasis", "Frenos", "Alineación", 
-  "Diagnóstico", "Aire Acondicionado", "Batería", "Gomas", "Tune-up", "Otro"
-];
+const PAYMENT_METHODS = ["Efectivo", "Ath Móvil", "Tarjeta de débito", "Tarjeta de crédito", "Cheque"];
+const RAW_PARTS_LIST = ["Bonete", "Foco delantero Izq", "Foco delantero Der", "Foglight frontal Izq", "Foglight delantero Der", "Whipers", "Bumper Delantero", "Guardalodo del. Der", "Guardalodo del. Izq", "Goma delantera Der", "Goma delantera Izq", "Cristal frontal", "Puerta frontal Izq", "Puerta frontal Der", "Ventana frontal Izq", "Ventana frontal Der", "Retrovisor Izq", "Retrovisor Der", "Capota", "Sunroof", "Spoiler", "Antena", "Panel trasero Izq", "Panel trasero Der", "Puerta trasera Izq", "Puerta trasera Der", "Ventana trasera Izq", "Ventana trasera Der", "Baúl", "Puerta de baúl", "Foco de Stop Der", "Foco de Stop Izq", "Luces de Reversa", "Bumper trasero", "Muffler", "Cámara de Reversa", "Tablilla"];
+const DEFAULT_INSPECTION_PARTS: InspectionPart[] = RAW_PARTS_LIST.map((label, index) => ({ id: `part_${index}`, label: label, damaged: false }));
+const COMMON_SERVICES = ["Cambio de Aceite y Filtro", "Lavado de Chasis", "Frenos", "Alineación", "Diagnóstico", "Aire Acondicionado", "Batería", "Gomas", "Tune-up", "Otro"];
 
 const statusConfig: Record<ServiceStatus, { label: string, color: string, icon: any }> = {
   recibido: { label: 'Recibido', color: 'bg-blue-100 text-blue-700 border-blue-200', icon: ClipboardList },
@@ -155,6 +59,7 @@ const formatPhone = (val: string) => {
   return v;
 };
 
+// --- ÍCONO DE WHATSAPP (RESTAURADO) ---
 const WhatsAppIcon = () => (
   <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
     <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.017-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
@@ -177,22 +82,23 @@ function App() {
   // --- LÓGICA CLOVER: Buscar orden por ID en Google Sheets ---
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const orderId = params.get('id'); // Busca "?id=ORD-123"
+    const orderId = params.get('id');
 
     if (orderId) {
       setLoadingReceipt(true);
-      // Usamos tu nuevo script para BUSCAR la orden
       fetch(`${GOOGLE_SCRIPT_URL}?id=${orderId}`)
         .then(res => res.json())
         .then(response => {
           if (response.result === 'success') {
             const data = response.data;
-            const parsedItems = JSON.parse(data.items);
+            let parsedItems = [];
+            try {
+               parsedItems = JSON.parse(data.items);
+            } catch(e) { parsedItems = [] }
             
-            // Reconstruimos el objeto Order
             const fetchedOrder: ServiceOrder = {
               id: data.id,
-              vehicleId: 'temp_veh',
+              vehicleId: 'temp_veh', 
               clientId: 'temp_cli',
               entryDate: data.entryDate,
               status: data.status,
@@ -209,7 +115,6 @@ function App() {
               inspection: { parts: [], notes: '' }
             };
 
-            // Reconstruimos el objeto Client
             const fetchedClient: Client = {
               id: 'temp_cli',
               name: data.clientName,
@@ -227,16 +132,15 @@ function App() {
 
             setReceiptData({ order: fetchedOrder, client: fetchedClient });
           } else {
-            setReceiptError("No se encontró la orden solicitada.");
+            setReceiptError("No se encontró la orden. Verifique el enlace.");
           }
         })
         .catch(err => {
           console.error(err);
-          setReceiptError("Error de conexión al buscar el recibo.");
+          setReceiptError("Error de conexión. Intente nuevamente.");
         })
         .finally(() => setLoadingReceipt(false));
     } else {
-      // Si no hay ID en el link, cargamos la App normal (Dashboard)
       const savedClients = localStorage.getItem('jaison_clients');
       if (savedClients) setClients(JSON.parse(savedClients));
       const savedOrders = localStorage.getItem('jaison_orders');
@@ -252,7 +156,7 @@ function App() {
     if (!receiptData && orders.length > 0) localStorage.setItem('jaison_orders', JSON.stringify(orders));
   }, [orders, receiptData]);
 
-  // --- VISTAS ESPECIALES (LOADING / RECIBO / ERROR) ---
+  // --- VISTAS ESPECIALES ---
   if (loadingReceipt) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
@@ -288,7 +192,7 @@ function App() {
       );
   }
 
-  // --- MODO ADMIN (DASHBOARD) ---
+  // --- MODO ADMIN ---
   const handleSaveOrder = async (newOrder: ServiceOrder, directClient?: Client, directVehicle?: Vehicle) => {
     setOrders(prev => {
         const exists = prev.some(o => o.id === newOrder.id);
@@ -1045,7 +949,7 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
         ? new Date(order.payments[order.payments.length - 1].date).toLocaleString() 
         : new Date().toLocaleString();
 
-    // GENERAR LINK DE RECIBO (AHORA USA ID)
+    // GENERAR LINK "ESTILO CLOVER" - ID Simple
     const generateSharedLink = () => {
         return `https://taller-jaison.vercel.app/?id=${order.id}`;
     };
