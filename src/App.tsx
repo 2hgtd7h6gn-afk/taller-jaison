@@ -7,20 +7,26 @@ import {
   X, CreditCard, History, CalendarDays, Archive, Mail, Link as LinkIcon
 } from 'lucide-react';
 
-// --- FUNCIONES AUXILIARES (UTF-8 + URL SAFE) ---
-const safeBtoa = (str: string) => {
-  const utf8Bytes = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
-      function (_: any, p1: any) {
-          return String.fromCharCode(parseInt(p1, 16));
-  });
-  return btoa(utf8Bytes);
+// --- FUNCIONES AUXILIARES (MÉTODO CLÁSICO ROBUSTO) ---
+// Este método nunca falla con tildes, ñ ni emojis
+const safeEncode = (obj: any) => {
+  try {
+    const str = JSON.stringify(obj);
+    return btoa(unescape(encodeURIComponent(str)));
+  } catch (e) {
+    console.error("Error encoding", e);
+    return "";
+  }
 };
 
-const safeAtob = (str: string) => {
-  const bytes = atob(str);
-  return decodeURIComponent(bytes.split('').map(function(c: any) {
-      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-  }).join(''));
+const safeDecode = (str: string) => {
+  try {
+    const json = decodeURIComponent(escape(atob(str)));
+    return JSON.parse(json);
+  } catch (e) {
+    console.error("Error decoding", e);
+    return null;
+  }
 };
 
 // --- CONFIGURACIÓN ---
@@ -149,19 +155,13 @@ const WhatsAppIcon = () => (
 
 // --- COMPONENTE PRINCIPAL ---
 function App() {
-  // LÓGICA DE VELOCIDAD: Inicializar estado directamente (CORREGIDO: Eliminado setSharedReceiptData)
-  const [sharedReceiptData] = useState<{order: ServiceOrder, client: Client} | null>(() => {
+  const [sharedReceiptData, setSharedReceiptData] = useState<{order: ServiceOrder, client: Client} | null>(() => {
+    // Verificamos la URL directamente al iniciar la App
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const receiptData = params.get('r');
       if (receiptData) {
-        try {
-          const jsonString = safeAtob(receiptData);
-          return JSON.parse(jsonString);
-        } catch (e) {
-          console.error("Error decodificando al inicio", e);
-          return null;
-        }
+        return safeDecode(receiptData);
       }
     }
     return null;
@@ -962,32 +962,43 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
         ? new Date(order.payments[order.payments.length - 1].date).toLocaleString() 
         : new Date().toLocaleString();
 
-    // GENERAR LINK "ESTILO CLOVER"
+    // GENERAR LINK "ESTILO CLOVER" - Versión Segura URL
     const generateSharedLink = () => {
-        const data = JSON.stringify({ order, client });
-        // Encodificamos el resultado para que sea seguro en URL
-        const encoded = encodeURIComponent(safeBtoa(data)); 
+        const data = { order, client };
+        const encoded = safeEncode(data);
         return `https://taller-jaison.vercel.app/?r=${encoded}`;
     };
 
+    // --- MENSAJES AUTOMATIZADOS ---
     const shareWhatsapp = () => {
         const link = generateSharedLink();
-        const text = `*JAISON AUTO REPAIR*\nHola ${client.name}, ve tu recibo aquí:\n${link}`;
-        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        // Limpiamos el teléfono (solo números)
+        const cleanPhone = client.phone.replace(/\D/g, ''); 
+        const text = `*JAISON AUTO REPAIR*\nHola ${client.name}\n${link}`;
+        
+        // Si hay teléfono, abrimos el chat directo
+        if(cleanPhone) {
+            window.open(`https://wa.me/1${cleanPhone}?text=${encodeURIComponent(text)}`);
+        } else {
+            // Si no, abrimos WhatsApp general para elegir contacto
+            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        }
     };
+
     const shareSMS = () => {
         const link = generateSharedLink();
-        const text = `JAISON AUTO REPAIR: Hola ${client.name}, ve tu recibo aqui: ${link}`;
-        window.open(`sms:${client.phone}?body=${encodeURIComponent(text)}`);
+        const cleanPhone = client.phone.replace(/\D/g, ''); 
+        const text = `JAISON AUTO REPAIR: Hola ${client.name} ${link}`;
+        window.open(`sms:${cleanPhone}?body=${encodeURIComponent(text)}`);
     };
+
     const shareEmail = () => {
         const link = generateSharedLink();
-        const subject = `Recibo de Servicio - ${vehicle.plate}`;
-        const body = `Hola ${client.name},\n\nAquí tienes el resumen de tu servicio en JAISON AUTO REPAIR.\n\nPuedes ver el recibo detallado en este enlace:\n${link}\n\nGracias por tu preferencia.`;
+        const subject = `Recibo Jaison Auto Repair - ${vehicle.plate}`;
+        const body = `Hola ${client.name},\n\nAquí tienes el resumen de tu servicio:\n${link}\n\nGracias por tu preferencia.`;
         window.open(`mailto:${client.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
     };
     
-    // Botón extra solo para copiar el link
     const copyLink = async () => {
         const link = generateSharedLink();
         if (navigator.clipboard) {
@@ -1024,7 +1035,6 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
                     <img src="/logo.png" alt="Jaison Auto Repair Logo" className="w-32 h-auto object-contain" />
                 </div>
                 
-                {/* --- SECCIÓN DE DIRECCIÓN ACTUALIZADA --- */}
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-black mb-2">JAISON AUTO REPAIR</h1>
                     <div className="text-xs font-medium text-slate-600 space-y-1">
