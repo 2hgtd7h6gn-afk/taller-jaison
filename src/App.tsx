@@ -4,20 +4,22 @@ import {
   Clock, ChevronRight, LayoutDashboard, 
   Trash2, ArrowLeft, Printer, AlertTriangle,
   FileText, CheckSquare, UserPlus, MessageSquare,
-  X, CreditCard, History, CalendarDays, Archive, Mail, Link as LinkIcon
+  X, CreditCard, History, CalendarDays, Archive, Mail, Link as LinkIcon, Loader2
 } from 'lucide-react';
+
+// --- CONFIGURACIÓN ---
+// TU URL NUEVA YA ESTÁ AQUÍ 👇
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyqSWhLGvtmoFrwsAn_sEJEj_rdgbJJpr-ctRFGptVV66bKVqwGRGRtqUoi2SqfGKIU/exec";
+const API_TOKEN = "TALLER_JAISON_SECURE_2026";
 
 // --- FUNCIONES DE ENCRIPTACIÓN ROBUSTAS ---
 const safeEncode = (obj: any) => {
   try {
-    // 1. Convertir objeto a texto JSON
     const str = JSON.stringify(obj);
-    // 2. Codificar tildes y ñ a formato seguro
     const utf8Bytes = encodeURIComponent(str).replace(/%([0-9A-F]{2})/g,
         function (_: any, p1: any) {
             return String.fromCharCode(parseInt(p1, 16));
     });
-    // 3. Convertir a Base64
     return btoa(utf8Bytes);
   } catch (e) {
     console.error("Error codificando", e);
@@ -27,25 +29,17 @@ const safeEncode = (obj: any) => {
 
 const safeDecode = (str: string) => {
   try {
-    // TRUCO: Si el link tiene espacios en lugar de '+', los reparamos
     const fixedStr = str.replace(/ /g, '+');
-    // 1. Decodificar Base64
     const bytes = atob(fixedStr);
-    // 2. Decodificar UTF-8 (Tildes)
     const json = decodeURIComponent(bytes.split('').map(function(c: any) {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
     }).join(''));
-    // 3. Convertir a objeto
     return JSON.parse(json);
   } catch (e) {
     console.error("Error decodificando", e);
     return null;
   }
 };
-
-// --- CONFIGURACIÓN ---
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzr5yPpZmAOOGgGR3-dmhqrdnsAi_bTJUMcPt5s5MuS6rQtP2EJFT5q6bXvty9eZrWt/exec";
-const API_TOKEN = "TALLER_JAISON_SECURE_2026";
 
 // --- Tipos y Modelos ---
 type ServiceStatus = 'recibido' | 'diagnostico' | 'espera_repuestos' | 'reparacion' | 'listo' | 'entregado';
@@ -169,17 +163,9 @@ const WhatsAppIcon = () => (
 
 // --- COMPONENTE PRINCIPAL ---
 function App() {
-  // Lógica de carga inmediata para el recibo
-  const [sharedReceiptData] = useState<{order: ServiceOrder, client: Client} | null>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const receiptData = params.get('r');
-      if (receiptData) {
-        return safeDecode(receiptData);
-      }
-    }
-    return null;
-  });
+  const [receiptData, setReceiptData] = useState<{order: ServiceOrder, client: Client} | null>(null);
+  const [loadingReceipt, setLoadingReceipt] = useState(false);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
 
   const [view, setView] = useState<'dashboard' | 'register' | 'history' | 'details' | 'settings' | 'receipt'>('dashboard');
   const [clients, setClients] = useState<Client[]>([]);
@@ -188,29 +174,112 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'active' | 'ready'>('all');
 
+  // --- LÓGICA CLOVER: Buscar orden por ID en Google Sheets ---
   useEffect(() => {
-    if (!sharedReceiptData) {
-        const savedClients = localStorage.getItem('jaison_clients');
-        if (savedClients) setClients(JSON.parse(savedClients));
-        const savedOrders = localStorage.getItem('jaison_orders');
-        if (savedOrders) setOrders(JSON.parse(savedOrders));
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get('id'); // Busca "?id=ORD-123"
+
+    if (orderId) {
+      setLoadingReceipt(true);
+      // Usamos tu nuevo script para BUSCAR la orden
+      fetch(`${GOOGLE_SCRIPT_URL}?id=${orderId}`)
+        .then(res => res.json())
+        .then(response => {
+          if (response.result === 'success') {
+            const data = response.data;
+            const parsedItems = JSON.parse(data.items);
+            
+            // Reconstruimos el objeto Order
+            const fetchedOrder: ServiceOrder = {
+              id: data.id,
+              vehicleId: 'temp_veh',
+              clientId: 'temp_cli',
+              entryDate: data.entryDate,
+              status: data.status,
+              description: data.description,
+              servicePerformedNotes: data.notes,
+              items: parsedItems,
+              total: Number(data.total),
+              subtotal: parsedItems.reduce((acc: number, i: any) => acc + i.price, 0),
+              tax: Number(data.total) - parsedItems.reduce((acc: number, i: any) => acc + i.price, 0),
+              applyIVU: true, 
+              payments: [{ id: 'p1', date: new Date().toISOString(), amount: Number(data.paid), method: 'Historial', type: 'partial', note: '' }],
+              isPaid: Number(data.debt) <= 0.01,
+              miles: '',
+              inspection: { parts: [], notes: '' }
+            };
+
+            // Reconstruimos el objeto Client
+            const fetchedClient: Client = {
+              id: 'temp_cli',
+              name: data.clientName,
+              phone: data.clientPhone,
+              email: '',
+              garage: [{
+                id: 'temp_veh',
+                plate: data.plate,
+                brand: data.vehicleInfo, 
+                model: '',
+                year: '',
+                color: ''
+              }]
+            };
+
+            setReceiptData({ order: fetchedOrder, client: fetchedClient });
+          } else {
+            setReceiptError("No se encontró la orden solicitada.");
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          setReceiptError("Error de conexión al buscar el recibo.");
+        })
+        .finally(() => setLoadingReceipt(false));
+    } else {
+      // Si no hay ID en el link, cargamos la App normal (Dashboard)
+      const savedClients = localStorage.getItem('jaison_clients');
+      if (savedClients) setClients(JSON.parse(savedClients));
+      const savedOrders = localStorage.getItem('jaison_orders');
+      if (savedOrders) setOrders(JSON.parse(savedOrders));
     }
-  }, [sharedReceiptData]);
+  }, []);
 
   useEffect(() => {
-    if (!sharedReceiptData && clients.length > 0) localStorage.setItem('jaison_clients', JSON.stringify(clients));
-  }, [clients, sharedReceiptData]);
+    if (!receiptData && clients.length > 0) localStorage.setItem('jaison_clients', JSON.stringify(clients));
+  }, [clients, receiptData]);
 
   useEffect(() => {
-    if (!sharedReceiptData && orders.length > 0) localStorage.setItem('jaison_orders', JSON.stringify(orders));
-  }, [orders, sharedReceiptData]);
+    if (!receiptData && orders.length > 0) localStorage.setItem('jaison_orders', JSON.stringify(orders));
+  }, [orders, receiptData]);
 
-  // --- MODO INVITADO (RECIBO PÚBLICO) ---
-  if (sharedReceiptData) {
+  // --- VISTAS ESPECIALES (LOADING / RECIBO / ERROR) ---
+  if (loadingReceipt) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
+        <p className="text-white font-bold animate-pulse">Buscando Recibo...</p>
+      </div>
+    );
+  }
+
+  if (receiptError) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-center">
+          <div className="bg-slate-800 p-8 rounded-3xl border border-red-500/50 max-w-sm">
+              <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold text-white mb-2">Error</h3>
+              <p className="text-slate-400 text-sm mb-6">{receiptError}</p>
+              <a href="/" className="bg-indigo-600 text-white py-3 px-6 rounded-xl font-bold text-sm">Ir al Inicio</a>
+          </div>
+      </div>
+    );
+  }
+
+  if (receiptData) {
       return (
         <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
             <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl overflow-hidden border border-slate-200">
-                <ReceiptView order={sharedReceiptData.order} client={sharedReceiptData.client} onClose={() => {}} isSharedMode={true} />
+                <ReceiptView order={receiptData.order} client={receiptData.client} onClose={() => {}} isSharedMode={true} />
                 <div className="bg-slate-50 p-4 text-center text-[10px] text-slate-400 border-t border-slate-100">
                     <p>Documento digital generado por <strong>Jaison Auto Repair App</strong></p>
                 </div>
@@ -976,15 +1045,12 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
         ? new Date(order.payments[order.payments.length - 1].date).toLocaleString() 
         : new Date().toLocaleString();
 
-    // GENERAR LINK "ESTILO CLOVER" - Versión Segura URL (BLINDADA)
+    // GENERAR LINK DE RECIBO (AHORA USA ID)
     const generateSharedLink = () => {
-        const data = { order, client };
-        // Paso clave: encodeURIComponent al final para proteger símbolos como '+'
-        const encoded = encodeURIComponent(safeEncode(data));
-        return `https://taller-jaison.vercel.app/?r=${encoded}`;
+        return `https://taller-jaison.vercel.app/?id=${order.id}`;
     };
 
-    // --- MENSAJES AUTOMATIZADOS (CON LINK BLINDADO) ---
+    // --- MENSAJES AUTOMATIZADOS (CORREGIDOS) ---
     const shareWhatsapp = () => {
         const link = generateSharedLink();
         const cleanPhone = client.phone.replace(/\D/g, ''); 
@@ -1012,6 +1078,7 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
         window.open(`mailto:${client.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
     };
     
+    // Botón extra solo para copiar el link
     const copyLink = async () => {
         const link = generateSharedLink();
         if (navigator.clipboard) {
@@ -1048,6 +1115,7 @@ const ReceiptView = ({ order, client, onClose, isSharedMode }: any) => {
                     <img src="/logo.png" alt="Jaison Auto Repair Logo" className="w-32 h-auto object-contain" />
                 </div>
                 
+                {/* --- SECCIÓN DE DIRECCIÓN ACTUALIZADA --- */}
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-black mb-2">JAISON AUTO REPAIR</h1>
                     <div className="text-xs font-medium text-slate-600 space-y-1">
