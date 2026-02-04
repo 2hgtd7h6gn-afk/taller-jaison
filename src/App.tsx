@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 // --- CONFIGURACIÓN ---
-// ✅ CORREGIDO: URL ENTRE COMILLAS
+// ✅ URL CORRECTA DE "APP FINAL ACTIVA" (Con comillas)
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxcIeywb9sOLBhgUjVPlUz20RORtzJo-ycAx50nTnx3SKxGF49Wna-M2uCW8hJYcsbo/exec";
 const API_TOKEN = "TALLER_JAISON_SECURE_2026";
 
@@ -78,7 +78,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'active' | 'ready'>('all');
 
-  // --- LÓGICA DE CARGA DE RECIBO (Con Alertas) ---
+  // --- LÓGICA DE CARGA DE RECIBO ---
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const orderId = params.get('id');
@@ -146,9 +146,9 @@ function App() {
     if (!receiptData && orders.length > 0) localStorage.setItem('jaison_orders', JSON.stringify(orders));
   }, [orders, receiptData]);
 
-  // --- MODO ADMIN (CON ALERTAS DE CONFIRMACIÓN) ---
+  // --- MODO ADMIN ---
   const handleSaveOrder = async (newOrder: ServiceOrder, directClient?: Client, directVehicle?: Vehicle) => {
-    // 1. Guardar localmente primero (para que no pierdas datos)
+    // 1. Guardar localmente
     setOrders(prev => {
         const exists = prev.some(o => o.id === newOrder.id);
         if (exists) return prev.map(o => o.id === newOrder.id ? newOrder : o);
@@ -179,18 +179,18 @@ function App() {
       metodo_pago: lastMethod
     };
 
-    // 3. Enviar a Google Sheets con feedback
+    // 3. Enviar a Google Sheets
     try {
         await fetch(GOOGLE_SCRIPT_URL, {
             method: 'POST',
-            mode: 'no-cors', // Importante para enviar datos sin leer respuesta
+            mode: 'no-cors',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
         alert("✅ Orden guardada en Nube y Local");
     } catch (error) {
         console.error('Error enviando a Google:', error);
-        alert("⚠️ Guardado en celular, pero falló la Nube. Revisa conexión.");
+        alert("⚠️ Guardado en celular, pero falló la Nube.");
     }
   };
 
@@ -740,7 +740,7 @@ const RegistrationProcess = ({ clients, setClients, onSave, onCancel }: any) => 
                   <span>${currentSubtotal.toFixed(2)}</span>
                 </div>
                 {orderForm.applyIVU && (
-                  <div className="flex justify-between text--[10px] font-bold text-indigo-400">
+                  <div className="flex justify-between text-[10px] font-bold text-indigo-400">
                     <span>IVU (11.5%)</span>
                     <span>${currentIVU.toFixed(2)}</span>
                   </div>
