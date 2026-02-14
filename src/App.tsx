@@ -9,9 +9,7 @@ import {
 
 // --- CONFIGURACIÓN ---
 // ✅ URL CORRECTA DE "APP FINAL ACTIVA" (Con comillas)
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxcIeywb9sOLBhgUjVPlUz20RORtzJo-ycAx50nTnx3SKxGF49Wna-M2uCW8hJYcsbo/exec";
-const API_TOKEN = "TALLER_JAISON_SECURE_2026";
-
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzm5cyC9ipARP2-UsqgX_2IrnSGfrwI2AFLFbKsXjIWjdXUUr49v2T5_PDaNN4Exk6_/exec"
 // --- TIPOS ---
 type ServiceStatus = 'recibido' | 'diagnostico' | 'espera_repuestos' | 'reparacion' | 'listo' | 'entregado';
 
